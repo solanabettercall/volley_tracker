@@ -11,7 +11,7 @@ import * as querystring from 'querystring';
 import { AxiosRequestConfig } from 'axios';
 
 interface TeamInfo {
-  id: string;
+  id: number;
   name: string;
   players: PlayerInfo[];
 }
@@ -23,7 +23,7 @@ enum MatchStatus {
 }
 
 interface MatchInfo {
-  id: string;
+  id: number;
   status: MatchStatus;
   home: TeamInfo;
   guest: TeamInfo;
@@ -31,8 +31,9 @@ interface MatchInfo {
 
 interface PlayerInfo {
   id: number;
-  name: string;
-  surname: string;
+  number: number;
+  fullName: string;
+  //   surname: string;
 }
 
 @Injectable()
@@ -81,9 +82,9 @@ export class DataprojectService implements OnApplicationBootstrap {
     }
   }
 
-  private async getMatchIds(): Promise<string[]> {
+  private async getMatchIds(): Promise<number[]> {
     const url = `https://${this.countrySlug}-web.dataproject.com/MainLiveScore.aspx`;
-    const matchIds: string[] = [];
+    const matchIds: number[] = [];
 
     try {
       const response = await this.httpService.axiosRef.get(url, {
@@ -110,7 +111,7 @@ export class DataprojectService implements OnApplicationBootstrap {
             ?.split('Match_Main_')[1]
             ?.trim();
           if (matchId) {
-            matchIds.push(matchId);
+            matchIds.push(+matchId);
           }
         } catch (e) {
           console.error('Error parsing match ID:', e);
@@ -123,7 +124,7 @@ export class DataprojectService implements OnApplicationBootstrap {
     return matchIds;
   }
 
-  private async getMatchesInfo(matchIds: string[]): Promise<MatchInfo[]> {
+  private async getMatchesInfo(matchIds: number[]): Promise<MatchInfo[]> {
     if (!matchIds.length) return [];
     const requestData = {
       H: 'signalrlivehubfederations',
@@ -195,8 +196,8 @@ export class DataprojectService implements OnApplicationBootstrap {
   }
 
   private async getTeamPlayersFromMatch(
-    matchId: string,
-    teamId: string,
+    matchId: number,
+    teamId: number,
   ): Promise<PlayerInfo[]> {
     let requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":2}`;
 
@@ -233,37 +234,84 @@ export class DataprojectService implements OnApplicationBootstrap {
       I: string;
     }>(config);
 
-    return data.R.map((r) => {
+    const players: PlayerInfo[] = data.R.map((r) => {
       return {
         id: r.PID,
-        name: r.NM,
-        surname: r.SR,
+        number: r.N,
+        fullName: `${r.SR} ${r.NM}`,
       };
     });
+    return players;
+  }
+
+  private async getTeamRoster(teamId: number) {
+    const url = `https://${this.countrySlug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
+    const headers = {
+      Host: 'bevl-web.dataproject.com',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+      Priority: 'u=0, i',
+    };
+
+    try {
+      const { data: html } = await this.httpService.axiosRef.get(url, {
+        headers,
+      });
+      const $ = cheerio.load(html);
+      const rosterDiv = $('#Content_Main_RPL_Roster');
+
+      const players: PlayerInfo[] = [];
+
+      rosterDiv
+        .find('div[id^="ctl00_Content_Main_PlayerListView_ctrl"][onclick]')
+        .each((_, el) => {
+          const element = $(el);
+
+          const onclickAttr = element.attr('onclick');
+          const playerId = onclickAttr?.split('PlayerID=')[1]?.split('&ID')[0];
+
+          const number = element
+            .find('div.t-hidden-xs .DIV_PlayerNumber')
+            .text()
+            .trim();
+
+          const name = element.find('.t-col').eq(4).text().trim();
+
+          if (playerId && number && name) {
+            players.push({
+              id: +playerId,
+              number: +number,
+              fullName: name,
+            });
+          }
+        });
+
+      return players;
+    } catch (error) {
+      console.error('Ошибка при получении состава команды:', error);
+      return [];
+    }
   }
 
   async onApplicationBootstrap() {
     this.connectionToken = await this.getConnectionToken();
-    const matchIds = await this.getMatchIds();
-    const matchesInfo = await this.getMatchesInfo(matchIds);
+    // const matchIds = await this.getMatchIds();
+    // const matchesInfo = await this.getMatchesInfo(matchIds);
 
-    if (!matchesInfo.length) {
-      Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
-      return;
-    }
+    // if (!matchesInfo.length) {
+    //   Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
+    //   return;
+    // }
 
-    console.log(matchesInfo);
     // console.log(JSON.stringify(matchesInfo, null, 2));
-
-    // const match = matchesInfo[0];
-    // const matchId = match.id;
-    // const homeId = match.home.id;
-    // const guestId = match.guest.id;
-
-    // const home = await this.getTeamPlayersFromMatch(matchId, homeId);
-    // console.log(home);
-
-    // const guest = await this.getTeamPlayersFromMatch(matchId, guestId);
-    // console.log(guest);
+    const players = await this.getTeamRoster(165);
+    console.log(players);
   }
 }
