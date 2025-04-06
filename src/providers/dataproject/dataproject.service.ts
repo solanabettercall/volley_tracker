@@ -13,6 +13,7 @@ import { AxiosRequestConfig } from 'axios';
 interface TeamInfo {
   id: string;
   name: string;
+  players: PlayerInfo[];
 }
 
 enum MatchStatus {
@@ -166,20 +167,31 @@ export class DataprojectService implements OnApplicationBootstrap {
       I: string;
     }>(config);
 
-    return data.R.map((r) => {
-      return {
-        id: r.ChampionshipMatchID,
-        status: r.Status,
-        home: {
-          id: r.Home,
-          name: r.HomeEmpty,
-        },
-        guest: {
-          id: r.Guest,
-          name: r.GuestEmpty,
-        },
-      };
-    });
+    const matches: MatchInfo[] = await Promise.all(
+      data.R.map(async (r) => {
+        return {
+          id: r.ChampionshipMatchID,
+          status: r.Status,
+          home: {
+            id: r.Home,
+            name: r.HomeEmpty,
+            players: await this.getTeamPlayersFromMatch(
+              r.ChampionshipMatchID,
+              r.Home,
+            ),
+          },
+          guest: {
+            id: r.Guest,
+            name: r.GuestEmpty,
+            players: await this.getTeamPlayersFromMatch(
+              r.ChampionshipMatchID,
+              r.Guest,
+            ),
+          },
+        };
+      }),
+    );
+    return matches;
   }
 
   private async getTeamPlayersFromMatch(
@@ -234,20 +246,24 @@ export class DataprojectService implements OnApplicationBootstrap {
     this.connectionToken = await this.getConnectionToken();
     const matchIds = await this.getMatchIds();
     const matchesInfo = await this.getMatchesInfo(matchIds);
-    console.log(matchesInfo);
+
     if (!matchesInfo.length) {
       Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
       return;
     }
-    const match = matchesInfo[0];
-    const matchId = match.id;
-    const homeId = match.home.id;
-    const guestId = match.guest.id;
 
-    const home = await this.getTeamPlayersFromMatch(matchId, homeId);
-    console.log(home);
+    console.log(matchesInfo);
+    // console.log(JSON.stringify(matchesInfo, null, 2));
 
-    const guest = await this.getTeamPlayersFromMatch(matchId, guestId);
-    console.log(guest);
+    // const match = matchesInfo[0];
+    // const matchId = match.id;
+    // const homeId = match.home.id;
+    // const guestId = match.guest.id;
+
+    // const home = await this.getTeamPlayersFromMatch(matchId, homeId);
+    // console.log(home);
+
+    // const guest = await this.getTeamPlayersFromMatch(matchId, guestId);
+    // console.log(guest);
   }
 }
