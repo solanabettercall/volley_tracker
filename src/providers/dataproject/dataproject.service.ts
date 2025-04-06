@@ -1,14 +1,7 @@
 import { HttpService } from '@nestjs/axios';
-import {
-  Injectable,
-  Logger,
-  NotImplementedException,
-  OnApplicationBootstrap,
-} from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as moment from 'moment';
 import * as cheerio from 'cheerio';
-import * as querystring from 'querystring';
-import { AxiosRequestConfig } from 'axios';
 
 interface TeamInfo {
   id: number;
@@ -33,7 +26,6 @@ interface PlayerInfo {
   id: number;
   number: number;
   fullName: string;
-  //   surname: string;
 }
 
 @Injectable()
@@ -133,7 +125,7 @@ export class DataprojectService implements OnApplicationBootstrap {
       I: 0,
     };
 
-    let config = {
+    const config = {
       method: 'post',
       maxBodyLength: Infinity,
       params: {
@@ -199,16 +191,9 @@ export class DataprojectService implements OnApplicationBootstrap {
     matchId: number,
     teamId: number,
   ): Promise<PlayerInfo[]> {
-    let requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":2}`;
+    const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":2}`;
 
-    // const requestData = {
-    //   H: 'signalrlivehubfederations',
-    //   M: 'getLiveScoreListData_From_ES',
-    //   A: [matchId, teamId, 'frv'],
-    //   I: 0,
-    // };
-
-    let config = {
+    const config = {
       method: 'post',
       maxBodyLength: Infinity,
       url: 'https://dataprojectservicesignalr.azurewebsites.net/signalr/send?transport=serverSentEvents&clientProtocol=2.1&connectionToken=pSNDhK5cwTvqY6ijUZqSfcayri3FEIw8nNZyHQXWKSB4ATYZimg9DBGqMBYoJd9W%2FzC4UfFvjCzOqdPTVM%2BWNaKKF6SL34xBO6q4Zcbv4CqjsPHmUdtNIQrNwDIpOYJJ&connectionData=[{"name":"signalrlivehubfederations"}]',
@@ -223,8 +208,6 @@ export class DataprojectService implements OnApplicationBootstrap {
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'cross-site',
-        Cookie:
-          'ARRAffinity=9adcc53f924e9830e358229e9c721b0c58dcfa70b35faff726e55cbaf987ce07; ARRAffinitySameSite=9adcc53f924e9830e358229e9c721b0c58dcfa70b35faff726e55cbaf987ce07',
       },
       data: requestData,
     };
