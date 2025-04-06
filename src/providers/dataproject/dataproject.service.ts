@@ -28,10 +28,16 @@ interface MatchInfo {
   guest: TeamInfo;
 }
 
+interface PlayerInfo {
+  id: number;
+  name: string;
+  surname: string;
+}
+
 @Injectable()
 export class DataprojectService implements OnApplicationBootstrap {
   constructor(private readonly httpService: HttpService) {}
-  private readonly domain = 'frv-web';
+  private readonly countrySlug = 'bevl';
 
   private connectionToken: string = null;
 
@@ -51,7 +57,7 @@ export class DataprojectService implements OnApplicationBootstrap {
           'Accept-Language': 'ru,ru-RU;q=0.9,en;q=0.8',
           Connection: 'keep-alive',
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          Origin: `https://${this.domain}.dataproject.com`,
+          Origin: `https://${this.countrySlug}-web.dataproject.com`,
           'Sec-Fetch-Dest': 'empty',
           'Sec-Fetch-Mode': 'cors',
           'Sec-Fetch-Site': 'cross-site',
@@ -75,7 +81,7 @@ export class DataprojectService implements OnApplicationBootstrap {
   }
 
   private async getMatchIds(): Promise<string[]> {
-    const url = `https://${this.domain}.dataproject.com/MainLiveScore.aspx`;
+    const url = `https://${this.countrySlug}-web.dataproject.com/MainLiveScore.aspx`;
     const matchIds: string[] = [];
 
     try {
@@ -117,12 +123,11 @@ export class DataprojectService implements OnApplicationBootstrap {
   }
 
   private async getMatchesInfo(matchIds: string[]): Promise<MatchInfo[]> {
-    const axios = require('axios');
-
+    if (!matchIds.length) return [];
     const requestData = {
       H: 'signalrlivehubfederations',
       M: 'getLiveScoreListData_From_ES',
-      A: [matchIds.join(';'), this.domain.split('-')[0]],
+      A: [matchIds.join(';'), this.countrySlug],
       I: 0,
     };
 
@@ -141,7 +146,7 @@ export class DataprojectService implements OnApplicationBootstrap {
         'Accept-Language': 'ru',
         Connection: 'keep-alive',
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: `https://${this.domain}.dataproject.com`,
+        Origin: `https://${this.countrySlug}-web.dataproject.com`,
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'cross-site',
@@ -175,7 +180,54 @@ export class DataprojectService implements OnApplicationBootstrap {
         },
       };
     });
-    // return data;
+  }
+
+  private async getTeamPlayersFromMatch(
+    matchId: string,
+    teamId: string,
+  ): Promise<PlayerInfo[]> {
+    let requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":2}`;
+
+    // const requestData = {
+    //   H: 'signalrlivehubfederations',
+    //   M: 'getLiveScoreListData_From_ES',
+    //   A: [matchId, teamId, 'frv'],
+    //   I: 0,
+    // };
+
+    let config = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: 'https://dataprojectservicesignalr.azurewebsites.net/signalr/send?transport=serverSentEvents&clientProtocol=2.1&connectionToken=pSNDhK5cwTvqY6ijUZqSfcayri3FEIw8nNZyHQXWKSB4ATYZimg9DBGqMBYoJd9W%2FzC4UfFvjCzOqdPTVM%2BWNaKKF6SL34xBO6q4Zcbv4CqjsPHmUdtNIQrNwDIpOYJJ&connectionData=[{"name":"signalrlivehubfederations"}]',
+      headers: {
+        Host: 'dataprojectservicesignalradv.azurewebsites.net',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+        Accept: 'text/plain, */*; q=0.01',
+        'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Origin: 'https://frv-web.dataproject.com',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'cross-site',
+        Cookie:
+          'ARRAffinity=9adcc53f924e9830e358229e9c721b0c58dcfa70b35faff726e55cbaf987ce07; ARRAffinitySameSite=9adcc53f924e9830e358229e9c721b0c58dcfa70b35faff726e55cbaf987ce07',
+      },
+      data: requestData,
+    };
+
+    const { data } = await this.httpService.axiosRef.request<{
+      R: any[];
+      I: string;
+    }>(config);
+
+    return data.R.map((r) => {
+      return {
+        id: r.PID,
+        name: r.NM,
+        surname: r.SR,
+      };
+    });
   }
 
   async onApplicationBootstrap() {
@@ -183,5 +235,19 @@ export class DataprojectService implements OnApplicationBootstrap {
     const matchIds = await this.getMatchIds();
     const matchesInfo = await this.getMatchesInfo(matchIds);
     console.log(matchesInfo);
+    if (!matchesInfo.length) {
+      Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
+      return;
+    }
+    const match = matchesInfo[0];
+    const matchId = match.id;
+    const homeId = match.home.id;
+    const guestId = match.guest.id;
+
+    const home = await this.getTeamPlayersFromMatch(matchId, homeId);
+    console.log(home);
+
+    const guest = await this.getTeamPlayersFromMatch(matchId, guestId);
+    console.log(guest);
   }
 }
