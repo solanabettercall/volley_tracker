@@ -1,41 +1,71 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotImplementedException,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import * as moment from 'moment';
+import * as cheerio from 'cheerio';
+import * as querystring from 'querystring';
+import { AxiosRequestConfig } from 'axios';
 
-interface PlayerInfo {
-  nameId: string;
+interface TeamInfo {
+  id: string;
   name: string;
-  name2: string;
-  number: string;
+}
+
+enum MatchStatus {
+  Scheduled = 0,
+  Live = 1,
+  Finished = 2,
+}
+
+interface MatchInfo {
+  id: string;
+  status: MatchStatus;
+  home: TeamInfo;
+  guest: TeamInfo;
 }
 
 @Injectable()
 export class DataprojectService implements OnApplicationBootstrap {
   constructor(private readonly httpService: HttpService) {}
+  private readonly domain = 'frv-web';
+
+  private connectionToken: string = null;
 
   private getTimestamp(): number {
     return moment().valueOf();
   }
 
-  async getConnectionToken(domain: string): Promise<string> {
+  async getConnectionToken(): Promise<string> {
     const timestamp = this.getTimestamp();
     try {
-      const url = `https://dataprojectservicesignalradv.azurewebsites.net/signalr/negotiate?clientProtocol=1.5&connectionData=[{"name":"signalrlivehubfederations"}]&_=${timestamp}`;
-
-      const headers = {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-        Accept: 'text/plain, */*; q=0.01',
-        'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: `https://${domain}`,
-        Connection: 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'cross-site',
+      let config = {
+        method: 'get',
+        maxBodyLength: Infinity,
+        url: `https://dataprojectservicesignalr.azurewebsites.net/signalr/negotiate?clientProtocol=2.1&connectionData=[{"name":"signalrlivehubfederations"}]&_=${timestamp}`,
+        headers: {
+          Accept: 'text/plain, */*; q=0.01',
+          'Accept-Language': 'ru,ru-RU;q=0.9,en;q=0.8',
+          Connection: 'keep-alive',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Origin: `https://${this.domain}.dataproject.com`,
+          'Sec-Fetch-Dest': 'empty',
+          'Sec-Fetch-Mode': 'cors',
+          'Sec-Fetch-Site': 'cross-site',
+          'Sec-Fetch-Storage-Access': 'active',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+          'sec-ch-ua':
+            '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+        },
       };
 
-      const response = await this.httpService.axiosRef.get(url, { headers });
+      const response = await this.httpService.axiosRef.request(config);
 
       const token = response.data.ConnectionToken;
       return token;
@@ -44,69 +74,114 @@ export class DataprojectService implements OnApplicationBootstrap {
     }
   }
 
-  // TODO исправить нейминг
-  async getSostavs(
-    token: string,
-    domain: string,
-    matchId: string,
-    teamId: number,
-    flTeam: number,
-  ): Promise<PlayerInfo[]> {
-    const players: PlayerInfo[] = [];
+  private async getMatchIds(): Promise<string[]> {
+    const url = `https://${this.domain}.dataproject.com/MainLiveScore.aspx`;
+    const matchIds: string[] = [];
 
     try {
-      const headers = {
+      const response = await this.httpService.axiosRef.get(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+          Connection: 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'same-origin',
+        },
+      });
+
+      const $ = cheerio.load(response.data);
+
+      $('div.match-main-wrapper').each((index, element) => {
+        try {
+          const matchId = $(element)
+            .attr('id')
+            ?.split('Match_Main_')[1]
+            ?.trim();
+          if (matchId) {
+            matchIds.push(matchId);
+          }
+        } catch (e) {
+          console.error('Error parsing match ID:', e);
+        }
+      });
+    } catch (e) {
+      console.error('Error fetching live matches:', e);
+    }
+
+    return matchIds;
+  }
+
+  private async getMatchesInfo(matchIds: string[]): Promise<MatchInfo[]> {
+    const axios = require('axios');
+
+    const requestData = {
+      H: 'signalrlivehubfederations',
+      M: 'getLiveScoreListData_From_ES',
+      A: [matchIds.join(';'), this.domain.split('-')[0]],
+      I: 0,
+    };
+
+    let config = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      params: {
+        transport: 'serverSentEvents',
+        clientProtocol: '2.1',
+        connectionToken: this.connectionToken,
+        connectionData: '[{"name":"signalrlivehubfederations"}]',
+      },
+      url: `https://dataprojectservicesignalr.azurewebsites.net/signalr/send`,
+      headers: {
         Accept: 'text/plain, */*; q=0.01',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Language': 'ru',
         Connection: 'keep-alive',
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: `https://${domain}`,
+        Origin: `https://${this.domain}.dataproject.com`,
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-Storage-Access': 'none',
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+        'sec-ch-ua':
+          '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+      },
+      data: `data=${JSON.stringify(requestData)}`,
+    };
+
+    const { data } = await this.httpService.axiosRef.request<{
+      R: any[];
+      I: string;
+    }>(config);
+
+    return data.R.map((r) => {
+      return {
+        id: r.ChampionshipMatchID,
+        status: r.Status,
+        home: {
+          id: r.Home,
+          name: r.HomeEmpty,
+        },
+        guest: {
+          id: r.Guest,
+          name: r.GuestEmpty,
+        },
       };
-
-      const params = {
-        transport: 'serverSentEvents',
-        clientProtocol: '1.5',
-        connectionToken: token,
-        connectionData: '[{"name":"signalrlivehubfederations"}]',
-      };
-
-      const domainDot = domain.split('-web.')[0];
-      const data = {
-        data: `{"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${domainDot}"],"I":${flTeam}}`,
-      };
-
-      const response = await this.httpService.axiosRef.post(
-        'https://dataprojectservicesignalradv.azurewebsites.net/signalr/send',
-        data,
-        { params, headers },
-      );
-
-      const rosterData = response.data?.R || [];
-
-      rosterData.forEach((player: any) => {
-        players.push({
-          nameId: player.PID,
-          name: player.SR,
-          name2: player.NM,
-          number: player.N,
-        });
-      });
-    } catch (error) {
-      Logger.error('Ошибка при получении составов:', error);
-    }
-
-    return players;
+    });
+    // return data;
   }
 
   async onApplicationBootstrap() {
-    const domain = 'frv-web.dataproject.com';
-    const connectionToken = await this.getConnectionToken(domain);
-    const asdsa = await this.getSostavs(connectionToken, domain, '3417', 2, 2);
-    Logger.debug(asdsa, 'asdsa');
+    this.connectionToken = await this.getConnectionToken();
+    const matchIds = await this.getMatchIds();
+    const matchesInfo = await this.getMatchesInfo(matchIds);
+    console.log(matchesInfo);
   }
 }
