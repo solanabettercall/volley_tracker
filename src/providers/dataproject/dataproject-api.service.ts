@@ -31,9 +31,9 @@ interface PlayerInfo {
 }
 
 @Injectable()
-export class DataprojectService implements OnApplicationBootstrap {
+export class DataprojectApiService implements OnApplicationBootstrap {
   constructor(private readonly httpService: HttpService) {}
-  private readonly countrySlug = 'frv';
+  private readonly countrySlug = 'ossrb';
 
   private connectionToken: string = null;
 
@@ -41,7 +41,7 @@ export class DataprojectService implements OnApplicationBootstrap {
     return moment().valueOf();
   }
 
-  async getConnectionToken(): Promise<string> {
+  private async getConnectionToken(): Promise<string> {
     const timestamp = this.getTimestamp();
     try {
       const config = {
@@ -292,19 +292,19 @@ export class DataprojectService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap() {
-    console.log(appConfig);
-    // this.connectionToken = await this.getConnectionToken();
+    this.connectionToken = await this.getConnectionToken();
     // const matchIds = await this.getMatchIds();
     // console.log(matchIds);
-    // const matchesInfo = await this.getMatchesInfo(matchIds);
+    const matchesInfo = await this.getMatchesInfo([11037]);
 
-    // if (!matchesInfo.length) {
-    //   Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
-    //   return;
-    // }
+    if (!matchesInfo.length) {
+      Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
+      return;
+    }
 
     // console.log(JSON.stringify(matchesInfo, null, 2));
-    // const players = await this.getTeamRoster(165);
-    // console.log(players);
+    console.log(matchesInfo[0].home.players);
+    const players = await this.getTeamRoster(911);
+    console.log(players);
   }
 }
