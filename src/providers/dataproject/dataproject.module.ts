@@ -1,8 +1,5 @@
 import { Module } from '@nestjs/common';
-import {
-  DataprojectApiService,
-  DataprojectCountryClient,
-} from './dataproject-api.service';
+import { DataprojectApiService } from './dataproject-api.service';
 import { DataprojectController } from './dataproject.controller';
 import { HttpModule } from '@nestjs/axios';
 import { DataprojectCacheService } from './dataproject-cache.service';

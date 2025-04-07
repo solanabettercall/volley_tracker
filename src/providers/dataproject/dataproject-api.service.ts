@@ -31,7 +31,7 @@ interface PlayerInfo {
   fullName: string;
 }
 
-export class DataprojectCountryClient {
+class DataprojectCountryClient {
   constructor(
     private readonly httpService: HttpService,
     public readonly countrySlug: string,
@@ -303,23 +303,6 @@ export class DataprojectCountryClient {
       return [];
     }
   }
-
-  // async onApplicationBootstrap() {
-  //   this.connectionToken = await this.getConnectionToken();
-  //   // const matchIds = await this.getMatchIds();
-  //   // console.log(matchIds);
-  //   const matchesInfo = await this.getMatchesInfo([11037]);
-
-  //   if (!matchesInfo.length) {
-  //     Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
-  //     return;
-  //   }
-
-  //   // console.log(JSON.stringify(matchesInfo, null, 2));
-  //   console.log(matchesInfo[0].home.players);
-  //   const players = await this.getTeamRoster(911);
-  //   console.log(players);
-  // }
 }
 
 export class DataprojectCountryCacheClient extends DataprojectCountryClient {
