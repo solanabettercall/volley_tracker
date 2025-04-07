@@ -1,9 +1,10 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as moment from 'moment';
 import * as cheerio from 'cheerio';
 import { AxiosRequestConfig } from 'axios';
 import { appConfig } from 'src/config';
+import Redis from 'ioredis';
 
 interface TeamInfo {
   id: number;
@@ -30,15 +31,23 @@ interface PlayerInfo {
   fullName: string;
 }
 
-@Injectable()
-export class DataprojectApiService implements OnApplicationBootstrap {
-  constructor(private readonly httpService: HttpService) {}
-  private readonly countrySlug = 'ossrb';
+export class DataprojectCountryClient {
+  constructor(
+    private readonly httpService: HttpService,
+    public readonly countrySlug: string,
+  ) {}
 
   private connectionToken: string = null;
 
   private getTimestamp(): number {
     return moment().valueOf();
+  }
+
+  private async ensureConnectionToken(): Promise<string> {
+    if (!this.connectionToken) {
+      this.connectionToken = await this.getConnectionToken();
+    }
+    return this.connectionToken;
   }
 
   private async getConnectionToken(): Promise<string> {
@@ -76,7 +85,7 @@ export class DataprojectApiService implements OnApplicationBootstrap {
     }
   }
 
-  private async getMatchIds(): Promise<number[]> {
+  protected async getMatchIds(): Promise<number[]> {
     const url = `https://${this.countrySlug}-web.dataproject.com/MainLiveScore.aspx`;
     const matchIds: number[] = [];
 
@@ -118,7 +127,9 @@ export class DataprojectApiService implements OnApplicationBootstrap {
     return matchIds;
   }
 
-  private async getMatchesInfo(matchIds: number[]): Promise<MatchInfo[]> {
+  protected async getMatchesInfo(matchIds: number[]): Promise<MatchInfo[]> {
+    const connectionToken = await this.ensureConnectionToken();
+
     if (!matchIds.length) return [];
     const requestData = {
       H: 'signalrlivehubfederations',
@@ -133,7 +144,7 @@ export class DataprojectApiService implements OnApplicationBootstrap {
       params: {
         transport: 'serverSentEvents',
         clientProtocol: '2.1',
-        connectionToken: this.connectionToken,
+        connectionToken,
         connectionData: '[{"name":"signalrlivehubfederations"}]',
       },
       url: `https://dataprojectservicesignalr.azurewebsites.net/signalr/send`,
@@ -189,11 +200,13 @@ export class DataprojectApiService implements OnApplicationBootstrap {
     return matches;
   }
 
-  private async getTeamPlayersFromMatch(
+  protected async getTeamPlayersFromMatch(
     matchId: number,
     teamId: number,
   ): Promise<PlayerInfo[]> {
     const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":2}`;
+
+    const connectionToken = await this.ensureConnectionToken();
 
     const config = {
       method: 'post',
@@ -202,7 +215,7 @@ export class DataprojectApiService implements OnApplicationBootstrap {
       params: {
         transport: 'serverSentEvents',
         clientProtocol: '2.1',
-        connectionToken: this.connectionToken,
+        connectionToken,
         connectionData: '[{"name":"signalrlivehubfederations"}]',
       },
       headers: {
@@ -235,7 +248,7 @@ export class DataprojectApiService implements OnApplicationBootstrap {
     return players;
   }
 
-  private async getTeamRoster(teamId: number) {
+  protected async getTeamRoster(teamId: number) {
     const url = `https://${this.countrySlug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
     const headers = {
       Host: `${this.countrySlug}-web.dataproject.com`,
@@ -291,20 +304,117 @@ export class DataprojectApiService implements OnApplicationBootstrap {
     }
   }
 
-  async onApplicationBootstrap() {
-    this.connectionToken = await this.getConnectionToken();
-    // const matchIds = await this.getMatchIds();
-    // console.log(matchIds);
-    const matchesInfo = await this.getMatchesInfo([11037]);
+  // async onApplicationBootstrap() {
+  //   this.connectionToken = await this.getConnectionToken();
+  //   // const matchIds = await this.getMatchIds();
+  //   // console.log(matchIds);
+  //   const matchesInfo = await this.getMatchesInfo([11037]);
 
-    if (!matchesInfo.length) {
-      Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
-      return;
+  //   if (!matchesInfo.length) {
+  //     Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
+  //     return;
+  //   }
+
+  //   // console.log(JSON.stringify(matchesInfo, null, 2));
+  //   console.log(matchesInfo[0].home.players);
+  //   const players = await this.getTeamRoster(911);
+  //   console.log(players);
+  // }
+}
+
+export class DataprojectCountryCacheClient extends DataprojectCountryClient {
+  constructor(httpService: HttpService, countrySlug: string) {
+    super(httpService, countrySlug);
+  }
+
+  private readonly redis = new Redis({
+    host: appConfig.redis.host,
+    port: appConfig.redis.port,
+  });
+
+  private readonly defaultTtl = 30; // в секундах
+
+  private async getOrSetCache<T>(
+    key: string,
+    fetcher: () => Promise<T>,
+    ttl = this.defaultTtl,
+  ): Promise<T> {
+    const cached = await this.redis.get(key);
+    if (cached) return JSON.parse(cached);
+
+    const fresh = await fetcher();
+    await this.redis.set(key, JSON.stringify(fresh), 'EX', ttl);
+    return fresh;
+  }
+
+  public override getMatchIds(): Promise<number[]> {
+    const key = `country:${this.countrySlug}:matchIds`;
+    return this.getOrSetCache(key, () => super.getMatchIds());
+  }
+
+  public override getMatchesInfo(matchIds: number[]): Promise<MatchInfo[]> {
+    const key = `country:${this.countrySlug}:matchesInfo:${matchIds.sort().join(',')}`;
+    return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds));
+  }
+
+  public override getTeamPlayersFromMatch(
+    matchId: number,
+    teamId: number,
+  ): Promise<PlayerInfo[]> {
+    const key = `country:${this.countrySlug}:playersFromMatch:${matchId}:${teamId}`;
+    return this.getOrSetCache(key, () =>
+      super.getTeamPlayersFromMatch(matchId, teamId),
+    );
+  }
+
+  public override getTeamRoster(teamId: number): Promise<PlayerInfo[]> {
+    const key = `country:${this.countrySlug}:teamRoster:${teamId}`;
+    return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
+  }
+}
+
+export type CountrySlug =
+  | 'hos'
+  | 'bevl'
+  | 'hvf'
+  | 'ossrb'
+  | 'hvl'
+  | 'frv'
+  | 'qva'
+  | 'cvf'
+  | 'ozs'
+  | 'tvf'
+  | 'nvbf'
+  | 'svf'
+  | 'fpv'
+  | 'rfevb'
+  | 'bli'
+  | 'lml'
+  | 'lnv'
+  | 'vbl'
+  | 'bvl'
+  | 'mevza'
+  | 'eope'
+  | 'swi'
+  | 'uvf'
+  | 'fshv'
+  | 'fpdv'
+  | 'kop'
+  | 'fpdv';
+
+@Injectable()
+export class DataprojectApiService {
+  private clients: Map<string, DataprojectCountryCacheClient> = new Map();
+
+  constructor(private readonly httpService: HttpService) {}
+
+  getClient(countrySlug: CountrySlug): DataprojectCountryCacheClient {
+    if (!this.clients.has(countrySlug)) {
+      this.clients.set(
+        countrySlug,
+        new DataprojectCountryCacheClient(this.httpService, countrySlug),
+      );
     }
-
-    // console.log(JSON.stringify(matchesInfo, null, 2));
-    console.log(matchesInfo[0].home.players);
-    const players = await this.getTeamRoster(911);
-    console.log(players);
+    return this.clients.get(countrySlug);
   }
 }
