@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as moment from 'moment';
 import * as cheerio from 'cheerio';
+import { AxiosRequestConfig } from 'axios';
 
 interface TeamInfo {
   id: number;
@@ -31,7 +32,7 @@ interface PlayerInfo {
 @Injectable()
 export class DataprojectService implements OnApplicationBootstrap {
   constructor(private readonly httpService: HttpService) {}
-  private readonly countrySlug = 'bevl';
+  private readonly countrySlug = 'frv';
 
   private connectionToken: string = null;
 
@@ -42,7 +43,7 @@ export class DataprojectService implements OnApplicationBootstrap {
   async getConnectionToken(): Promise<string> {
     const timestamp = this.getTimestamp();
     try {
-      let config = {
+      const config = {
         method: 'get',
         maxBodyLength: Infinity,
         url: `https://dataprojectservicesignalr.azurewebsites.net/signalr/negotiate?clientProtocol=2.1&connectionData=[{"name":"signalrlivehubfederations"}]&_=${timestamp}`,
@@ -125,7 +126,7 @@ export class DataprojectService implements OnApplicationBootstrap {
       I: 0,
     };
 
-    const config = {
+    const config: AxiosRequestConfig = {
       method: 'post',
       maxBodyLength: Infinity,
       params: {
@@ -196,15 +197,21 @@ export class DataprojectService implements OnApplicationBootstrap {
     const config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: 'https://dataprojectservicesignalr.azurewebsites.net/signalr/send?transport=serverSentEvents&clientProtocol=2.1&connectionToken=pSNDhK5cwTvqY6ijUZqSfcayri3FEIw8nNZyHQXWKSB4ATYZimg9DBGqMBYoJd9W%2FzC4UfFvjCzOqdPTVM%2BWNaKKF6SL34xBO6q4Zcbv4CqjsPHmUdtNIQrNwDIpOYJJ&connectionData=[{"name":"signalrlivehubfederations"}]',
+      url: `https://dataprojectservicesignalr.azurewebsites.net/signalr/send`,
+      params: {
+        transport: 'serverSentEvents',
+        clientProtocol: '2.1',
+        connectionToken: this.connectionToken,
+        connectionData: '[{"name":"signalrlivehubfederations"}]',
+      },
       headers: {
-        Host: 'dataprojectservicesignalradv.azurewebsites.net',
+        Host: 'dataprojectservicesignalr.azurewebsites.net',
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
         Accept: 'text/plain, */*; q=0.01',
         'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: 'https://frv-web.dataproject.com',
+        Origin: `https://${this.countrySlug}-web.dataproject.com`,
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'cross-site',
@@ -230,7 +237,7 @@ export class DataprojectService implements OnApplicationBootstrap {
   private async getTeamRoster(teamId: number) {
     const url = `https://${this.countrySlug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
     const headers = {
-      Host: 'bevl-web.dataproject.com',
+      Host: `${this.countrySlug}-web.dataproject.com`,
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -285,16 +292,18 @@ export class DataprojectService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap() {
     this.connectionToken = await this.getConnectionToken();
-    // const matchIds = await this.getMatchIds();
-    // const matchesInfo = await this.getMatchesInfo(matchIds);
 
-    // if (!matchesInfo.length) {
-    //   Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
-    //   return;
-    // }
+    const matchIds = await this.getMatchIds();
+    console.log(matchIds);
+    const matchesInfo = await this.getMatchesInfo(matchIds);
 
-    // console.log(JSON.stringify(matchesInfo, null, 2));
-    const players = await this.getTeamRoster(165);
-    console.log(players);
+    if (!matchesInfo.length) {
+      Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
+      return;
+    }
+
+    console.log(JSON.stringify(matchesInfo, null, 2));
+    // const players = await this.getTeamRoster(165);
+    // console.log(players);
   }
 }
