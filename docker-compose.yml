@@ -1,0 +1,63 @@
+services:
+  app:
+    container_name: dnd_app
+    build: .
+    command: yarn start:dev
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+          ignore:
+            - node_modules/
+            - dist/
+        - action: sync
+          path: ./test
+          target: /app/test
+        - action: rebuild
+          path: package.json
+        - action: rebuild
+          path: yarn.lock
+
+    depends_on:
+      - redis
+      - db
+    restart: always
+
+  redis:
+    container_name: cache
+    image: redis/redis-stack:7.2.0-v14
+    ports:
+      - '${REDIS_PORT}:6379'
+    restart: unless-stopped
+    volumes:
+      - cache:/data
+  db:
+    container_name: db
+    image: postgres:14.15-alpine
+    restart: always
+    ports:
+      - '${DB_PORT}:5432'
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  pgadmin:
+    container_name: pgadmin
+    image: elestio/pgadmin:REL-8_13
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_LISTEN_PORT: 8080
+    ports:
+      - '${PGADMIN_PORT}:8080'
+
+volumes:
+  db:
+  app:
+  cache:

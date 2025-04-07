@@ -3,6 +3,7 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as moment from 'moment';
 import * as cheerio from 'cheerio';
 import { AxiosRequestConfig } from 'axios';
+import { appConfig } from 'src/config';
 
 interface TeamInfo {
   id: number;
@@ -291,18 +292,18 @@ export class DataprojectService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap() {
-    this.connectionToken = await this.getConnectionToken();
+    console.log(appConfig);
+    // this.connectionToken = await this.getConnectionToken();
+    // const matchIds = await this.getMatchIds();
+    // console.log(matchIds);
+    // const matchesInfo = await this.getMatchesInfo(matchIds);
 
-    const matchIds = await this.getMatchIds();
-    console.log(matchIds);
-    const matchesInfo = await this.getMatchesInfo(matchIds);
+    // if (!matchesInfo.length) {
+    //   Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
+    //   return;
+    // }
 
-    if (!matchesInfo.length) {
-      Logger.debug(`Матчей в ${this.countrySlug} не запланировано`);
-      return;
-    }
-
-    console.log(JSON.stringify(matchesInfo, null, 2));
+    // console.log(JSON.stringify(matchesInfo, null, 2));
     // const players = await this.getTeamRoster(165);
     // console.log(players);
   }
