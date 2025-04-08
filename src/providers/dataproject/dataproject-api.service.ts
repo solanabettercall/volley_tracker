@@ -5,31 +5,9 @@ import * as cheerio from 'cheerio';
 import { AxiosRequestConfig } from 'axios';
 import { appConfig } from 'src/config';
 import Redis from 'ioredis';
-
-interface TeamInfo {
-  id: number;
-  name: string;
-  players: PlayerInfo[];
-}
-
-enum MatchStatus {
-  Scheduled = 0,
-  Live = 1,
-  Finished = 2,
-}
-
-interface MatchInfo {
-  id: number;
-  status: MatchStatus;
-  home: TeamInfo;
-  guest: TeamInfo;
-}
-
-interface PlayerInfo {
-  id: number;
-  number: number;
-  fullName: string;
-}
+import { MatchInfo } from './interfaces/match-info.interface';
+import { PlayerInfo } from './interfaces/player-info.interface';
+import { CountrySlug } from './types';
 
 class DataprojectCountryClient {
   constructor(
@@ -286,7 +264,13 @@ class DataprojectCountryClient {
             .text()
             .trim();
 
-          const name = element.find('.t-col').eq(4).text().trim();
+          const name = element
+            .find('.t-col')
+            .eq(4)
+            .find('p')
+            .first()
+            .text()
+            .trim();
 
           if (playerId && number && name) {
             players.push({
@@ -315,7 +299,7 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     port: appConfig.redis.port,
   });
 
-  private readonly defaultTtl = 30; // в секундах
+  private readonly defaultTtl = 120; // в секундах
 
   private async getOrSetCache<T>(
     key: string,
@@ -355,35 +339,6 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
   }
 }
-
-export type CountrySlug =
-  | 'hos'
-  | 'bevl'
-  | 'hvf'
-  | 'ossrb'
-  | 'hvl'
-  | 'frv'
-  | 'qva'
-  | 'cvf'
-  | 'ozs'
-  | 'tvf'
-  | 'nvbf'
-  | 'svf'
-  | 'fpv'
-  | 'rfevb'
-  | 'bli'
-  | 'lml'
-  | 'lnv'
-  | 'vbl'
-  | 'bvl'
-  | 'mevza'
-  | 'eope'
-  | 'swi'
-  | 'uvf'
-  | 'fshv'
-  | 'fpdv'
-  | 'kop'
-  | 'fpdv';
 
 @Injectable()
 export class DataprojectApiService {

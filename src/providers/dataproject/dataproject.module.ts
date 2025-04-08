@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { DataprojectApiService } from './dataproject-api.service';
 import { DataprojectController } from './dataproject.controller';
 import { HttpModule } from '@nestjs/axios';
-import { DataprojectCacheService } from './dataproject-cache.service';
+import { DataprojectService } from './dataproject.service';
 
 @Module({
   imports: [
@@ -14,7 +14,7 @@ import { DataprojectCacheService } from './dataproject-cache.service';
       },
     }),
   ],
-  providers: [DataprojectApiService, DataprojectCacheService],
+  providers: [DataprojectApiService, DataprojectService],
   controllers: [DataprojectController],
 })
 export class DataprojectModule {}
