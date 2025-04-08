@@ -287,6 +287,45 @@ class DataprojectCountryClient {
       return [];
     }
   }
+
+  protected async getLineUp(matchId: number) {
+    const connectionToken = await this.ensureConnectionToken();
+
+    const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.countrySlug}"],"I":1}`;
+
+    let config: AxiosRequestConfig = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: 'https://dataprojectservicesignalr.azurewebsites.net/signalr/send',
+
+      params: {
+        transport: 'serverSentEvents',
+        clientProtocol: '2.1',
+        connectionToken,
+        connectionData: '[{"name":"signalrlivehubfederations"}]',
+      },
+      headers: {
+        Host: 'dataprojectservicesignalr.azurewebsites.net',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+        Accept: 'text/plain, */*; q=0.01',
+        'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        Origin: `https://${this.countrySlug}-web.dataproject.com`,
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'cross-site',
+      },
+      data: payload,
+    };
+
+    const { data } = await this.httpService.axiosRef.request<{
+      R: any[];
+      I: string;
+    }>(config);
+
+    return data.R;
+  }
 }
 
 export class DataprojectCountryCacheClient extends DataprojectCountryClient {
@@ -337,6 +376,13 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
   public override getTeamRoster(teamId: number): Promise<PlayerInfo[]> {
     const key = `country:${this.countrySlug}:teamRoster:${teamId}`;
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
+  }
+
+  public override getLineUp(matchId: number): Promise<any> {
+    // const key = `country:${this.countrySlug}:lineUp:${matchId}`;
+    // return this.getOrSetCache(key, () => super.getLineUp(matchId));
+
+    return super.getLineUp(matchId);
   }
 }
 
