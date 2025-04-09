@@ -175,7 +175,33 @@ class DataprojectCountryClient {
         };
       }),
     );
-    return matches;
+
+    const updatedMatches = await Promise.all(
+      matches.map(async (match) => {
+        const activePlayerIds = await this.getMatchActivePlayerIds(match.id);
+        if (!activePlayerIds.length) return match;
+
+        const setIsActive = (players: PlayerInfo[]): PlayerInfo[] =>
+          players.map((p) => ({
+            ...p,
+            isActive: activePlayerIds.includes(p.id),
+          }));
+
+        return {
+          ...match,
+          home: {
+            ...match.home,
+            players: setIsActive(match.home.players),
+          },
+          guest: {
+            ...match.guest,
+            players: setIsActive(match.guest.players),
+          },
+        };
+      }),
+    );
+
+    return updatedMatches;
   }
 
   protected async getTeamPlayersFromMatch(
@@ -288,7 +314,7 @@ class DataprojectCountryClient {
     }
   }
 
-  protected async getLineUp(matchId: number) {
+  protected async getMatchActivePlayerIds(matchId: number): Promise<number[]> {
     const connectionToken = await this.ensureConnectionToken();
 
     const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.countrySlug}"],"I":1}`;
@@ -319,12 +345,21 @@ class DataprojectCountryClient {
       data: payload,
     };
 
+    type PlayerLineUpInfo = {
+      PN: number;
+      PZ: number;
+      PID: number;
+      HG: boolean;
+      L: boolean;
+      WHG: boolean;
+    };
+
     const { data } = await this.httpService.axiosRef.request<{
-      R: any[];
+      R: PlayerLineUpInfo[];
       I: string;
     }>(config);
 
-    return data.R;
+    return data.R.map((R) => R.PID);
   }
 }
 
@@ -376,13 +411,6 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
   public override getTeamRoster(teamId: number): Promise<PlayerInfo[]> {
     const key = `country:${this.countrySlug}:teamRoster:${teamId}`;
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
-  }
-
-  public override getLineUp(matchId: number): Promise<any> {
-    // const key = `country:${this.countrySlug}:lineUp:${matchId}`;
-    // return this.getOrSetCache(key, () => super.getLineUp(matchId));
-
-    return super.getLineUp(matchId);
   }
 }
 

@@ -7,8 +7,10 @@ export class DataprojectService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap() {
     const client = this.dataprojectApiService.getClient('cvf');
-    const lineUpData = await client.getLineUp(4607);
-    console.log(lineUpData);
+    const match = await client.getMatchesInfo([4607]);
+    console.log(JSON.stringify(match[0], null, 2));
+    // const lineUpData = await client.getMatchLineupPlayerIds(4607);
+    // console.log(lineUpData);
     // // const matchIds = await client.getMatchIds();
     // // console.log(matchIds);
     // const matchesInfo = await client.getMatchesInfo([4607]);
