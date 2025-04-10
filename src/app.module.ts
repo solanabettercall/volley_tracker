@@ -5,6 +5,7 @@ import { DataprojectModule } from './providers/dataproject/dataproject.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bull';
 import { appConfig } from './config';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { appConfig } from './config';
     BullModule.registerQueue({
       name: 'country-monitor',
     }),
+    TelegramModule,
   ],
   controllers: [AppController],
   providers: [AppService],
