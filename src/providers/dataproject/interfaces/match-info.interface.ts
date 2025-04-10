@@ -6,4 +6,5 @@ export interface MatchInfo {
   status: MatchStatus;
   home: TeamInfo;
   guest: TeamInfo;
+  competition?: string;
 }

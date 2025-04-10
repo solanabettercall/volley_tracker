@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { DataprojectApiService } from './dataproject-api.service';
 import { DataprojectController } from './dataproject.controller';
 import { HttpModule } from '@nestjs/axios';
-import { DataprojectService } from './dataproject.service';
+import { DataprojectMonitorService } from './dataproject.service';
+import { DataprojectMonitorProcessor } from './dataproject-monitor.processor';
+import { BullModule } from '@nestjs/bull';
+import { MONITOR_QUEUE } from './monitor.consts';
 
 @Module({
   imports: [
@@ -13,8 +16,13 @@ import { DataprojectService } from './dataproject.service';
         protocol: 'http',
       },
     }),
+    BullModule.registerQueue({ name: MONITOR_QUEUE }),
   ],
-  providers: [DataprojectApiService, DataprojectService],
+  providers: [
+    DataprojectApiService,
+    DataprojectMonitorService,
+    DataprojectMonitorProcessor,
+  ],
   controllers: [DataprojectController],
 })
 export class DataprojectModule {}

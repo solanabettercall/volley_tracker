@@ -23,6 +23,34 @@ export type CountrySlug =
   | 'swi'
   | 'uvf'
   | 'fshv'
-  | 'fpdv'
   | 'kop'
   | 'fpdv';
+
+export const countrySlugs: CountrySlug[] = [
+  'hos',
+  'bevl',
+  'hvf',
+  'ossrb',
+  'hvl',
+  'frv',
+  'qva',
+  'cvf',
+  'ozs',
+  'tvf',
+  'nvbf',
+  'svf',
+  'fpv',
+  'rfevb',
+  'bli',
+  'lml',
+  'lnv',
+  'vbl',
+  'bvl',
+  'mevza',
+  'eope',
+  'swi',
+  'uvf',
+  'fshv',
+  'fpdv',
+  'kop',
+];

@@ -9,6 +9,11 @@ import { MatchInfo } from './interfaces/match-info.interface';
 import { PlayerInfo } from './interfaces/player-info.interface';
 import { CountrySlug } from './types';
 
+type RawMatch = {
+  id: number;
+  competition: string;
+};
+
 class DataprojectCountryClient {
   constructor(
     private readonly httpService: HttpService,
@@ -63,50 +68,43 @@ class DataprojectCountryClient {
     }
   }
 
-  protected async getMatchIds(): Promise<number[]> {
+  protected async getRawMatchs(): Promise<RawMatch[]> {
     const url = `https://${this.countrySlug}-web.dataproject.com/MainLiveScore.aspx`;
-    const matchIds: number[] = [];
+    const matches: RawMatch[] = [];
 
     try {
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
-          Connection: 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'same-origin',
+          /* ... */
         },
       });
-
       const $ = cheerio.load(response.data);
 
-      $('div.match-main-wrapper').each((index, element) => {
-        try {
-          const matchId = $(element)
-            .attr('id')
-            ?.split('Match_Main_')[1]
-            ?.trim();
-          if (matchId) {
-            matchIds.push(+matchId);
-          }
-        } catch (e) {
-          console.error('Error parsing match ID:', e);
+      $('div.match-main-wrapper').each((_, element) => {
+        const competition = $(element)
+          .find('span[id^="Content_Main_RLV_MatchList_LBL_Competition"]')
+          .text()
+          .trim();
+
+        const matchId = $(element).attr('id')?.split('Match_Main_')[1]?.trim();
+
+        if (matchId && competition) {
+          matches.push({ id: +matchId, competition });
         }
       });
     } catch (e) {
       console.error('Error fetching live matches:', e);
     }
 
-    return matchIds;
+    return matches;
   }
 
-  protected async getMatchesInfo(matchIds: number[]): Promise<MatchInfo[]> {
+  protected async getMatchesInfo(rawMatches: RawMatch[]): Promise<MatchInfo[]> {
     const connectionToken = await this.ensureConnectionToken();
+    const matchIds = rawMatches.map((m) => m.id);
+    const competitionMap = new Map(
+      rawMatches.map((m) => [m.id, m.competition]),
+    );
 
     if (!matchIds.length) return [];
     const requestData = {
@@ -153,7 +151,9 @@ class DataprojectCountryClient {
 
     const matches: MatchInfo[] = await Promise.all(
       data.R.map(async (r) => {
-        return {
+        const id = r.ChampionshipMatchID;
+        console.log(r.MatchDateTime);
+        const match: MatchInfo = {
           id: r.ChampionshipMatchID,
           status: r.Status,
           home: {
@@ -172,7 +172,10 @@ class DataprojectCountryClient {
               r.Guest,
             ),
           },
+          competition: competitionMap.get(id),
         };
+
+        return match;
       }),
     );
 
@@ -388,17 +391,21 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     return fresh;
   }
 
-  public override getMatchIds(): Promise<number[]> {
-    const key = `country:${this.countrySlug}:matchIds`;
-    return this.getOrSetCache(key, () => super.getMatchIds());
+  protected override getRawMatchs(): Promise<RawMatch[]> {
+    // const key = `country:${this.countrySlug}:matchIds`;
+    // return this.getOrSetCache(key, () => super.getMatchIds());
+    return super.getRawMatchs();
   }
 
-  public override getMatchesInfo(matchIds: number[]): Promise<MatchInfo[]> {
-    const key = `country:${this.countrySlug}:matchesInfo:${matchIds.sort().join(',')}`;
-    return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds));
+  public override async getMatchesInfo(): Promise<MatchInfo[]> {
+    const matchIds = await this.getRawMatchs();
+    // const key = `country:${this.countrySlug}:matchesInfo:${matchIds.sort().join(',')}`;
+    // return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds));
+
+    return super.getMatchesInfo(matchIds);
   }
 
-  public override getTeamPlayersFromMatch(
+  protected override getTeamPlayersFromMatch(
     matchId: number,
     teamId: number,
   ): Promise<PlayerInfo[]> {
