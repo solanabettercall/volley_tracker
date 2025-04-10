@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
-import { DataprojectApiService } from './dataproject-api.service';
+import {
+  DataprojectApiService,
+  DataprojectCountryCacheClient,
+} from './dataproject-api.service';
 import { DataprojectController } from './dataproject.controller';
 import { HttpModule } from '@nestjs/axios';
 import { DataprojectMonitorService } from './dataproject.service';
@@ -24,5 +27,6 @@ import { MONITOR_QUEUE } from './monitor.consts';
     DataprojectMonitorProcessor,
   ],
   controllers: [DataprojectController],
+  exports: [DataprojectApiService],
 })
 export class DataprojectModule {}

@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { DataprojectApiService } from './dataproject-api.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { countrySlugs } from './types';
+import { countries } from './types';
 import { Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
 import { MONITOR_QUEUE } from './monitor.consts';
@@ -22,7 +22,7 @@ export class DataprojectMonitorService implements OnApplicationBootstrap {
 
   // @Cron(CronExpression.EVERY_10_SECONDS)
   async enqueueAllCountries() {
-    for (const slug of countrySlugs) {
+    for (const { slug } of countries) {
       await this.monitorQueue.add('monitor-country', { slug });
     }
   }
