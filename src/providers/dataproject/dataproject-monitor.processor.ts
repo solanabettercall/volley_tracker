@@ -16,8 +16,19 @@ export class DataprojectMonitorProcessor {
       const client = this.dataprojectApiService.getClient(slug);
       const matches = await client.getMatchesInfo();
 
-      Logger.debug(`Slug: ${slug}, Matches: ${matches.length}`);
-      // тут делай что нужно с матчами
+      const now = new Date();
+      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+
+      const upcomingMatches = matches.filter(
+        (match) =>
+          match.matchDateTimeUtc &&
+          match.matchDateTimeUtc > now &&
+          match.matchDateTimeUtc <= oneHourLater,
+      );
+
+      Logger.debug(
+        `Slug: ${slug}, Upcoming matches in next hour: ${upcomingMatches.length}`,
+      );
     } catch (err) {
       Logger.error(`Ошибка при обработке ${slug}: ${err.message}`);
     }

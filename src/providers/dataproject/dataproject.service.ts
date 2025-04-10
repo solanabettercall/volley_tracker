@@ -14,16 +14,16 @@ export class DataprojectMonitorService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap() {
-    const client = this.dataprojectApiService.getClient('hos');
-    const matches = await client.getMatchesInfo();
-    console.log(matches);
-    // await this.enqueueAllCountries();
+    // const client = this.dataprojectApiService.getClient('hos');
+    // const matches = await client.getMatchesInfo();
+    // console.log(matches);
+    await this.enqueueAllCountries();
   }
 
   // @Cron(CronExpression.EVERY_10_SECONDS)
   async enqueueAllCountries() {
-    // for (const slug of countrySlugs) {
-    //   await this.monitorQueue.add('monitor-country', { slug });
-    // }
+    for (const slug of countrySlugs) {
+      await this.monitorQueue.add('monitor-country', { slug });
+    }
   }
 }

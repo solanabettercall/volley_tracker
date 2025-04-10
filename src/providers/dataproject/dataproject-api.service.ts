@@ -89,15 +89,21 @@ class DataprojectCountryClient {
 
         const time = $(element)
           .find('span[id^="Content_Main_RLV_MatchList_LB_Ora_Today_"]')
-          .text();
-        const [utcHour, utcMinute] = time.split(':').map(Number);
+          .text()
+          .trim()
+          .replace('.', ':');
 
+        const [utcHourStr, utcMinuteStr] = time.split(':');
+        const utcHour = parseInt(utcHourStr, 10);
+        const utcMinute = parseInt(utcMinuteStr, 10);
+
+        if (isNaN(utcHour) || isNaN(utcMinute)) {
+          Logger.warn(`Невалидное время матча: "${time}"`);
+          return;
+        }
         const matchDateTimeUtc = moment
           .utc()
-          .set('hour', utcHour)
-          .set('minute', utcMinute)
-          .set('second', 0)
-          .set('millisecond', 0)
+          .set({ hour: utcHour, minute: utcMinute, second: 0, millisecond: 0 })
           .toDate();
 
         const matchId = $(element).attr('id')?.split('Match_Main_')[1]?.trim();
@@ -230,7 +236,7 @@ class DataprojectCountryClient {
     matchId: number,
     teamId: number,
   ): Promise<PlayerInfo[]> {
-    const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":2}`;
+    const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":0}`;
 
     const connectionToken = await this.ensureConnectionToken();
 
@@ -339,7 +345,7 @@ class DataprojectCountryClient {
   protected async getMatchActivePlayerIds(matchId: number): Promise<number[]> {
     const connectionToken = await this.ensureConnectionToken();
 
-    const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.countrySlug}"],"I":1}`;
+    const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.countrySlug}"],"I":0}`;
 
     let config: AxiosRequestConfig = {
       method: 'post',
