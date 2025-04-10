@@ -12,6 +12,7 @@ import { CountrySlug } from './types';
 type RawMatch = {
   id: number;
   competition: string;
+  matchDateTimeUtc: Date;
 };
 
 class DataprojectCountryClient {
@@ -75,7 +76,7 @@ class DataprojectCountryClient {
     try {
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
-          /* ... */
+          Cookie: 'timezoneoffset=0', // Для получения времени в UTC-0
         },
       });
       const $ = cheerio.load(response.data);
@@ -86,10 +87,23 @@ class DataprojectCountryClient {
           .text()
           .trim();
 
+        const time = $(element)
+          .find('span[id^="Content_Main_RLV_MatchList_LB_Ora_Today_"]')
+          .text();
+        const [utcHour, utcMinute] = time.split(':').map(Number);
+
+        const matchDateTimeUtc = moment
+          .utc()
+          .set('hour', utcHour)
+          .set('minute', utcMinute)
+          .set('second', 0)
+          .set('millisecond', 0)
+          .toDate();
+
         const matchId = $(element).attr('id')?.split('Match_Main_')[1]?.trim();
 
         if (matchId && competition) {
-          matches.push({ id: +matchId, competition });
+          matches.push({ id: +matchId, competition, matchDateTimeUtc });
         }
       });
     } catch (e) {
@@ -103,7 +117,10 @@ class DataprojectCountryClient {
     const connectionToken = await this.ensureConnectionToken();
     const matchIds = rawMatches.map((m) => m.id);
     const competitionMap = new Map(
-      rawMatches.map((m) => [m.id, m.competition]),
+      rawMatches.map((m) => [
+        m.id,
+        { competition: m.competition, matchDateTimeUtc: m.matchDateTimeUtc },
+      ]),
     );
 
     if (!matchIds.length) return [];
@@ -152,10 +169,12 @@ class DataprojectCountryClient {
     const matches: MatchInfo[] = await Promise.all(
       data.R.map(async (r) => {
         const id = r.ChampionshipMatchID;
-        console.log(r.MatchDateTime);
         const match: MatchInfo = {
           id: r.ChampionshipMatchID,
           status: r.Status,
+          matchDateTimeUtc:
+            competitionMap.get(id)?.matchDateTimeUtc ?? new Date(),
+
           home: {
             id: r.Home,
             name: r.HomeEmpty,
@@ -172,7 +191,7 @@ class DataprojectCountryClient {
               r.Guest,
             ),
           },
-          competition: competitionMap.get(id),
+          competition: competitionMap.get(id)?.competition,
         };
 
         return match;

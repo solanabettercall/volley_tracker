@@ -7,4 +7,5 @@ export interface MatchInfo {
   home: TeamInfo;
   guest: TeamInfo;
   competition?: string;
+  matchDateTimeUtc: Date;
 }
