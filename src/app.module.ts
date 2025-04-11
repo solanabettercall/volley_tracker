@@ -7,6 +7,7 @@ import { BullModule } from '@nestjs/bull';
 import { appConfig } from './config';
 import { TelegramModule } from './telegram/telegram.module';
 import { MongooseModule } from '@nestjs/mongoose';
+import { MonitoringModule } from './monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { MongooseModule } from '@nestjs/mongoose';
     MongooseModule.forRoot(
       `mongodb://${appConfig.db.username}:${appConfig.db.password}@${appConfig.db.host}:${appConfig.db.port}/${appConfig.db.database}?authSource=admin`,
     ),
+    MonitoringModule,
   ],
   controllers: [AppController],
   providers: [AppService],

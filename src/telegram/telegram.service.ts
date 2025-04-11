@@ -7,6 +7,7 @@ import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api
 import { countries, CountrySlug } from 'src/providers/dataproject/types';
 
 import { MonitoredTeam } from '../schemas/monitoring.schema';
+import { MonitoringService } from 'src/monitoring/monitoring.service';
 
 @Injectable()
 export class TelegramService implements OnApplicationBootstrap {
@@ -14,84 +15,9 @@ export class TelegramService implements OnApplicationBootstrap {
 
   constructor(
     private readonly dataprojectApiService: DataprojectApiService,
-    @InjectModel('MonitoredTeam')
-    private readonly monitoredTeamModel: Model<MonitoredTeam>,
+    private readonly monitoringService: MonitoringService,
   ) {
     this.telegramBot = new TelegramBot(appConfig.tg.token, { polling: true });
-  }
-
-  async addPlayerToMonitoring(
-    userId: number,
-    countrySlug: string,
-    teamId: number,
-    playerId: number,
-  ): Promise<void> {
-    await this.monitoredTeamModel.findOneAndUpdate(
-      { userId, countrySlug, teamId },
-      { $addToSet: { players: playerId } },
-      { upsert: true, new: true },
-    );
-  }
-
-  async removePlayerFromMonitoring(
-    userId: number,
-    countrySlug: string,
-    teamId: number,
-    playerId: number,
-  ): Promise<void> {
-    await this.monitoredTeamModel.findOneAndUpdate(
-      { userId, countrySlug, teamId },
-      { $pull: { players: playerId } },
-    );
-  }
-
-  async getMonitoredPlayers(
-    userId: number,
-    countrySlug?: string,
-  ): Promise<MonitoredTeam[]> {
-    const query: any = { userId };
-    if (countrySlug) {
-      query.countrySlug = countrySlug;
-    }
-    return this.monitoredTeamModel.find(query).exec();
-  }
-
-  async getPlayersForTeam(
-    userId: number,
-    countrySlug: string,
-    teamId: number,
-  ): Promise<number[]> {
-    const team = await this.monitoredTeamModel
-      .findOne({ userId, countrySlug, teamId })
-      .exec();
-    return team?.players ? [...team.players] : [];
-  }
-
-  async isPlayerMonitored(userId: number, playerId: number): Promise<boolean> {
-    const count = await this.monitoredTeamModel
-      .countDocuments({
-        userId,
-        players: playerId,
-      })
-      .exec();
-    return count > 0;
-  }
-
-  async removeTeamFromMonitoring(
-    userId: number,
-    countrySlug: string,
-    teamId: number,
-  ): Promise<void> {
-    await this.monitoredTeamModel
-      .deleteOne({ userId, countrySlug, teamId })
-      .exec();
-  }
-
-  async removeCountryFromMonitoring(
-    userId: number,
-    countrySlug: string,
-  ): Promise<void> {
-    await this.monitoredTeamModel.deleteMany({ userId, countrySlug }).exec();
   }
 
   async onApplicationBootstrap() {
@@ -166,7 +92,7 @@ export class TelegramService implements OnApplicationBootstrap {
   ) {
     Logger.debug('togglePlayer', { userId, countrySlug, teamId, playerId });
 
-    const monitoredTeam = await this.getPlayersForTeam(
+    const monitoredTeam = await this.monitoringService.getPlayersForTeam(
       userId,
       countrySlug,
       teamId,
@@ -174,21 +100,26 @@ export class TelegramService implements OnApplicationBootstrap {
     const alreadyMonitored = monitoredTeam.includes(playerId);
 
     if (alreadyMonitored) {
-      await this.removePlayerFromMonitoring(
+      await this.monitoringService.removePlayerFromMonitoring(
         userId,
         countrySlug,
         teamId,
         playerId,
       );
     } else {
-      await this.addPlayerToMonitoring(userId, countrySlug, teamId, playerId);
+      await this.monitoringService.addPlayerToMonitoring(
+        userId,
+        countrySlug,
+        teamId,
+        playerId,
+      );
     }
 
     const players = await this.dataprojectApiService
       .getClient(countrySlug)
       .getTeamRoster(teamId);
 
-    const updatedPlayerIds = await this.getPlayersForTeam(
+    const updatedPlayerIds = await this.monitoringService.getPlayersForTeam(
       userId,
       countrySlug,
       teamId,
@@ -226,14 +157,14 @@ export class TelegramService implements OnApplicationBootstrap {
     countrySlug: CountrySlug,
     teamId: number,
   ) {
-    const monitoredPlayers = await this.getPlayersForTeam(
+    const monitoredPlayers = await this.monitoringService.getPlayersForTeam(
       chatId,
       countrySlug,
       teamId,
     );
 
     for (const playerId of monitoredPlayers) {
-      await this.removePlayerFromMonitoring(
+      await this.monitoringService.removePlayerFromMonitoring(
         chatId,
         countrySlug,
         teamId,
@@ -359,7 +290,11 @@ export class TelegramService implements OnApplicationBootstrap {
     const country = countries.find((c) => c.slug === countrySlug);
 
     const monitoredPlayerIds = new Set(
-      await this.getPlayersForTeam(chatId, countrySlug, teamId),
+      await this.monitoringService.getPlayersForTeam(
+        chatId,
+        countrySlug,
+        teamId,
+      ),
     );
 
     const keyboard = players.map((player) => [
@@ -395,9 +330,8 @@ export class TelegramService implements OnApplicationBootstrap {
   }
 
   private async sendMonitoringStatus(chatId: number) {
-    const monitoredTeams = await this.monitoredTeamModel
-      .find({ userId: chatId })
-      .exec();
+    const monitoredTeams =
+      await this.monitoringService.getMonitoredTeams(chatId);
 
     if (!monitoredTeams || monitoredTeams.length === 0) {
       await this.telegramBot.sendMessage(
