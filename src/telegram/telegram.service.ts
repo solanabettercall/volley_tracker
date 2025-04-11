@@ -269,7 +269,18 @@ export class TelegramService implements OnApplicationBootstrap {
 
     const client = this.dataprojectApiService.getClient(countrySlug);
     const teamList = await client.getAllTeams();
-    const keyboard = teamList.map((team) => [
+    const matches = await client.getMatchesInfo();
+    const matchTeams = matches.flatMap((m) => [m.guest, m.home]);
+    const allTeams = [...teamList, ...matchTeams];
+    const uniqueTeamsMap = new Map<number, (typeof allTeams)[number]>();
+
+    for (const team of allTeams) {
+      uniqueTeamsMap.set(team.id, team);
+    }
+
+    const uniqueTeams = Array.from(uniqueTeamsMap.values());
+
+    const keyboard = uniqueTeams.map((team) => [
       {
         text: team.name,
         callback_data: `select_team:${countrySlug}:${team.id}`,

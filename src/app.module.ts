@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bull';
 import { appConfig } from './config';
 import { TelegramModule } from './telegram/telegram.module';
+import { MongooseModule } from '@nestjs/mongoose';
 
 @Module({
   imports: [
@@ -21,6 +22,10 @@ import { TelegramModule } from './telegram/telegram.module';
       name: 'country-monitor',
     }),
     TelegramModule,
+    MongooseModule.forRoot(
+      `mongodb://${appConfig.db.host}:${appConfig.db.port}/${appConfig.db.database}`,
+      {},
+    ),
   ],
   controllers: [AppController],
   providers: [AppService],

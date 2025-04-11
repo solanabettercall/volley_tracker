@@ -32,30 +32,33 @@ services:
     restart: unless-stopped
     volumes:
       - cache:/data
+
   db:
     container_name: db
-    image: postgres:14.15-alpine
+    image: mongo:8.0.6 # Используем MongoDB вместо PostgreSQL
     restart: always
     ports:
-      - '${DB_PORT}:5432'
+      - '${DB_PORT}:27017'
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_NAME}
     volumes:
-      - db:/var/lib/postgresql/data
+      - db:/data/db # Сохраняем данные MongoDB в volume
 
-  pgadmin:
-    container_name: pgadmin
-    image: elestio/pgadmin:REL-8_13
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-      PGADMIN_LISTEN_PORT: 8080
+  mongo-express:
+    container_name: mongo-express
+    image: mongo-express:1.0.2
     ports:
-      - '${PGADMIN_PORT}:8080'
+      - '8081:8081' # Открываем порт 8081 для доступа
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=db
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=${DB_USER}
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${DB_PASSWORD}
+    depends_on:
+      - db # Зависит от MongoDB
+    restart: always
 
 volumes:
   db:
