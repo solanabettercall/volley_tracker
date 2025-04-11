@@ -1,4 +1,4 @@
-import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { appConfig } from 'src/config';
 import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api.service';
@@ -9,39 +9,13 @@ import { countries, CountrySlug } from 'src/providers/dataproject/types';
 export class TelegramService implements OnApplicationBootstrap {
   private readonly telegramBot: TelegramBot;
 
-  private monitoredPlayers: Record<number, Record<number, number[]>> = {};
-
-  private teamsData: Record<CountrySlug, TeamInfo[]> = {} as Record<
-    CountrySlug,
-    TeamInfo[]
-  >;
+  private monitoredPlayers: Record<
+    number,
+    Record<string, Record<number, number[]>>
+  > = {};
 
   constructor(private readonly dataprojectApiService: DataprojectApiService) {
     this.telegramBot = new TelegramBot(appConfig.tg.token, { polling: true });
-    this.initializeMockTeamsData();
-  }
-
-  private initializeMockTeamsData() {
-    countries.forEach((country) => {
-      this.teamsData[country.slug] = [
-        {
-          id: Math.floor(Math.random() * 10000),
-          name: `${country.name} Team A`,
-          players: [
-            { id: 1, number: 1, fullName: 'Player 1' },
-            { id: 2, number: 2, fullName: 'Player 2' },
-          ],
-        },
-        {
-          id: Math.floor(Math.random() * 10000),
-          name: `${country.name} Team B`,
-          players: [
-            { id: 3, number: 3, fullName: 'Player 3' },
-            { id: 4, number: 4, fullName: 'Player 4' },
-          ],
-        },
-      ];
-    });
   }
 
   async onApplicationBootstrap() {
@@ -58,7 +32,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
       const [action, ...payload] = data.split(':');
       const chatId = msg.chat.id;
-
+      console.log(callbackQuery);
       switch (action) {
         case 'select_country_menu':
           this.sendCountries(chatId);
@@ -67,13 +41,27 @@ export class TelegramService implements OnApplicationBootstrap {
           this.sendTeams(chatId, payload[0] as CountrySlug);
           break;
         case 'select_team':
-          this.sendPlayers(chatId, parseInt(payload[0]));
+          this.sendPlayers(
+            chatId,
+            payload[0] as CountrySlug,
+            parseInt(payload[1]),
+          );
           break;
         case 'toggle_player':
-          this.togglePlayer(chatId, parseInt(payload[0]), parseInt(payload[1]));
+          this.togglePlayer(
+            chatId,
+            payload[0] as CountrySlug,
+            parseInt(payload[1]),
+            parseInt(payload[2]),
+            msg.message_id,
+          );
           break;
         case 'stop_monitoring':
-          this.stopMonitoring(chatId, parseInt(payload[0]));
+          this.stopMonitoring(
+            chatId,
+            payload[0] as CountrySlug,
+            parseInt(payload[1]),
+          );
           break;
         case 'back_to_main':
           this.sendMainMenu(chatId);
@@ -93,57 +81,119 @@ export class TelegramService implements OnApplicationBootstrap {
     });
   }
 
-  private togglePlayer(chatId: number, teamId: number, playerId: number) {
+  private async togglePlayer(
+    chatId: number,
+    countrySlug: CountrySlug,
+    teamId: number,
+    playerId: number,
+    messageId: number, // Добавляем ID сообщения для редактирования
+  ) {
+    const citySlug = countrySlug; // Используем citySlug как countrySlug
+    Logger.debug('togglePlayer', {
+      chatId,
+      countrySlug,
+      teamId,
+      playerId,
+    });
+
+    // Инициализируем структуру данных, если её нет
     if (!this.monitoredPlayers[chatId]) {
       this.monitoredPlayers[chatId] = {};
     }
-    if (!this.monitoredPlayers[chatId][teamId]) {
-      this.monitoredPlayers[chatId][teamId] = [];
+    if (!this.monitoredPlayers[chatId][citySlug]) {
+      this.monitoredPlayers[chatId][citySlug] = {};
+    }
+    if (!this.monitoredPlayers[chatId][citySlug][teamId]) {
+      this.monitoredPlayers[chatId][citySlug][teamId] = [];
     }
 
-    const playerIndex = this.monitoredPlayers[chatId][teamId].indexOf(playerId);
+    // Проверка на наличие игрока в списке
+    const playerIndex =
+      this.monitoredPlayers[chatId]?.[citySlug]?.[teamId]?.indexOf(playerId);
+
     if (playerIndex === -1) {
-      this.monitoredPlayers[chatId][teamId].push(playerId);
+      // Добавляем игрока в список мониторинга
+      this.monitoredPlayers[chatId][citySlug][teamId].push(playerId);
     } else {
-      this.monitoredPlayers[chatId][teamId].splice(playerIndex, 1);
-      if (this.monitoredPlayers[chatId][teamId].length === 0) {
-        delete this.monitoredPlayers[chatId][teamId];
+      // Удаляем игрока из списка мониторинга
+      this.monitoredPlayers[chatId][citySlug][teamId].splice(playerIndex, 1);
+      // Если больше нет игроков, удаляем запись о команде
+      if (this.monitoredPlayers[chatId][citySlug][teamId].length === 0) {
+        delete this.monitoredPlayers[chatId][citySlug][teamId];
       }
     }
 
-    this.sendPlayers(chatId, teamId);
-  }
+    // Получаем список игроков для команды
+    const players = await this.dataprojectApiService
+      .getClient(countrySlug)
+      .getTeamRoster(teamId);
 
-  private stopMonitoring(chatId: number, teamId: number) {
-    if (this.monitoredPlayers[chatId]?.[teamId]) {
-      delete this.monitoredPlayers[chatId][teamId];
+    const teams = await this.dataprojectApiService
+      .getClient(countrySlug)
+      .getAllTeams();
+    const team = teams.find((t) => t.id === teamId);
+    const country = countries.find((c) => c.slug === countrySlug);
+
+    const monitoredPlayers =
+      this.monitoredPlayers[chatId]?.[citySlug]?.[teamId] || [];
+
+    // Создаем клавиатуру
+    const keyboard = players.map((player) => [
+      {
+        text: `${monitoredPlayers.includes(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
+        callback_data: `toggle_player:${countrySlug}:${teamId}:${player.id}`,
+      },
+    ]);
+
+    // Если есть активные игроки в мониторинге, добавляем кнопку для прекращения мониторинга
+    if (monitoredPlayers.length > 0) {
+      keyboard.push([
+        {
+          text: '🚫 Прекратить мониторинг команды',
+          callback_data: `stop_monitoring:${countrySlug}:${teamId}`,
+        },
+      ]);
     }
 
-    const team = this.findTeamById(teamId);
+    // Добавляем кнопки для возврата
+    keyboard.push([
+      { text: '⬅️ Назад', callback_data: `back_to_teams:${countrySlug}` },
+      { text: '🏠 На главную', callback_data: 'back_to_main' },
+    ]);
+
+    // Обновляем клавиатуру в сообщении
+    await this.telegramBot.editMessageReplyMarkup(
+      { inline_keyboard: keyboard },
+      { chat_id: chatId, message_id: messageId },
+    );
+  }
+
+  private async stopMonitoring(
+    chatId: number,
+    countrySlug: CountrySlug,
+    teamId: number,
+  ) {
+    // Используем citySlug вместо countrySlug
+    const citySlug = countrySlug; // или извлекаем citySlug из другого источника
+
+    if (this.monitoredPlayers[chatId]?.[citySlug]?.[teamId]) {
+      delete this.monitoredPlayers[chatId][citySlug][teamId];
+    }
+
+    // Получаем данные команды
+    const teams = await this.dataprojectApiService
+      .getClient(countrySlug)
+      .getAllTeams();
+    const team = teams.find((t) => t.id === teamId);
+
     if (team) {
-      const country = this.findCountryByTeam(team);
+      // Определяем страну по команде
+      const country = countries.find((c) => c.slug === countrySlug);
       if (country) {
         this.sendTeams(chatId, country.slug);
       }
     }
   }
-
-  private findTeamById(teamId: number): TeamInfo | undefined {
-    for (const country of countries) {
-      const team = this.teamsData[country.slug]?.find((t) => t.id === teamId);
-      if (team) return team;
-    }
-    return undefined;
-  }
-
-  private findCountryByTeam(
-    team: TeamInfo,
-  ): { slug: CountrySlug; name: string; emoji: string } | undefined {
-    return countries.find((country) =>
-      this.teamsData[country.slug]?.some((t) => t.id === team.id),
-    );
-  }
-
   private sendMainMenu(chatId: number) {
     const keyboard = {
       inline_keyboard: [
@@ -195,15 +245,17 @@ export class TelegramService implements OnApplicationBootstrap {
     });
   }
 
-  private sendTeams(chatId: number, countrySlug: CountrySlug) {
+  private async sendTeams(chatId: number, countrySlug: CountrySlug) {
     const country = countries.find((c) => c.slug === countrySlug);
     if (!country) return;
 
-    const teamList = this.teamsData[countrySlug] || [];
+    // const teamList = this.teamsData[countrySlug] || [];
+    const client = this.dataprojectApiService.getClient(countrySlug);
+    const teamList = await client.getAllTeams();
     const keyboard = teamList.map((team) => [
       {
         text: team.name,
-        callback_data: `select_team:${team.id}`,
+        callback_data: `select_team:${countrySlug}:${team.id}`,
       },
     ]);
     keyboard.push([{ text: '⬅️ Назад', callback_data: 'back_to_countries' }]);
@@ -219,19 +271,28 @@ export class TelegramService implements OnApplicationBootstrap {
     );
   }
 
-  private sendPlayers(chatId: number, teamId: number) {
-    const team = this.findTeamById(teamId);
-    if (!team) return;
+  private async sendPlayers(
+    chatId: number,
+    countrySlug: CountrySlug,
+    teamId: number,
+  ) {
+    const players = await this.dataprojectApiService
+      .getClient(countrySlug)
+      .getTeamRoster(teamId);
 
-    const country = this.findCountryByTeam(team);
-    if (!country) return;
+    const teams = await this.dataprojectApiService
+      .getClient(countrySlug)
+      .getAllTeams();
+    const team = teams.find((t) => t.id === teamId);
+    const country = countries.find((c) => c.slug === countrySlug);
 
-    const monitoredPlayers = this.monitoredPlayers[chatId]?.[teamId] || [];
+    const monitoredPlayers =
+      this.monitoredPlayers[chatId]?.[countrySlug]?.[teamId] || [];
 
-    const keyboard = team.players.map((player) => [
+    const keyboard = players.map((player) => [
       {
         text: `${monitoredPlayers.includes(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
-        callback_data: `toggle_player:${teamId}:${player.id}`,
+        callback_data: `toggle_player:${countrySlug}:${teamId}:${player.id}`,
       },
     ]);
 
@@ -239,13 +300,13 @@ export class TelegramService implements OnApplicationBootstrap {
       keyboard.push([
         {
           text: '🚫 Прекратить мониторинг команды',
-          callback_data: `stop_monitoring:${teamId}`,
+          callback_data: `stop_monitoring:${countrySlug}:${teamId}`,
         },
       ]);
     }
 
     keyboard.push([
-      { text: '⬅️ Назад', callback_data: `back_to_teams:${country.slug}` },
+      { text: '⬅️ Назад', callback_data: `back_to_teams:${countrySlug}` },
       { text: '🏠 На главную', callback_data: 'back_to_main' },
     ]);
 
@@ -260,7 +321,7 @@ export class TelegramService implements OnApplicationBootstrap {
     );
   }
 
-  private sendMonitoringStatus(chatId: number) {
+  private async sendMonitoringStatus(chatId: number) {
     const monitored = this.monitoredPlayers[chatId];
 
     if (!monitored || Object.keys(monitored).length === 0) {
@@ -286,18 +347,32 @@ export class TelegramService implements OnApplicationBootstrap {
 
     let message = '📊 Ваш текущий мониторинг:\n\n';
 
-    for (const [teamId, playerIds] of Object.entries(monitored)) {
-      const team = this.findTeamById(parseInt(teamId));
-      if (!team) continue;
+    // Проходим по всем странам и командам
+    for (const [citySlug, teams] of Object.entries(monitored)) {
+      // Получаем все команды для данного города
+      const teamList = await this.dataprojectApiService
+        .getClient(citySlug as CountrySlug)
+        .getAllTeams();
 
-      const country = this.findCountryByTeam(team);
-      if (!country) continue;
+      // Проходим по всем командам, которые находятся под мониторингом
+      for (const [teamId, playerIds] of Object.entries(teams)) {
+        const team = teamList.find((t) => t.id === parseInt(teamId));
+        const country = countries.find((c) => c.slug === citySlug);
 
-      const players = team.players.filter((p) => playerIds.includes(p.id));
+        if (!team || !country) continue;
 
-      message += `*${country.emoji} ${country.name} - ${team.name}:*\n`;
-      message += players.map((p) => `• #${p.number} ${p.fullName}`).join('\n');
-      message += '\n\n';
+        const teamRoster = await this.dataprojectApiService
+          .getClient(citySlug as CountrySlug)
+          .getTeamRoster(+teamId);
+
+        const players = teamRoster.filter((p) => playerIds.includes(p.id));
+
+        message += `*${country.emoji} ${country.name} - ${team.name}:*\n`;
+        message += players
+          .map((p) => `• #${p.number} ${p.fullName}`)
+          .join('\n');
+        message += '\n\n';
+      }
     }
 
     const keyboard = [
