@@ -400,7 +400,7 @@ export class TelegramService implements OnApplicationBootstrap {
       .exec();
 
     if (!monitoredTeams || monitoredTeams.length === 0) {
-      this.telegramBot.sendMessage(
+      await this.telegramBot.sendMessage(
         chatId,
         'Сейчас у вас нет активного мониторинга игроков.',
         {
@@ -486,7 +486,7 @@ export class TelegramService implements OnApplicationBootstrap {
       ],
     ];
 
-    this.telegramBot.sendMessage(
+    await this.telegramBot.sendMessage(
       chatId,
       message || 'Пока нет команд в мониторинге.',
       {
