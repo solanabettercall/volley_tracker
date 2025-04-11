@@ -2,7 +2,6 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { appConfig } from 'src/config';
 import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api.service';
-import { TeamInfo } from 'src/providers/dataproject/interfaces/team-info.interface';
 import { countries, CountrySlug } from 'src/providers/dataproject/types';
 
 interface MonitoredTeam {
@@ -185,8 +184,19 @@ export class TelegramService implements OnApplicationBootstrap {
     countrySlug: CountrySlug,
     teamId: number,
   ) {
-    if (this.monitoredPlayers[chatId]?.[countrySlug]?.[teamId]) {
-      delete this.monitoredPlayers[chatId][countrySlug][teamId];
+    const userMonitoring = this.monitoredPlayers.get(chatId);
+    const countryMonitoring = userMonitoring?.get(countrySlug);
+
+    if (countryMonitoring?.teams.has(teamId)) {
+      countryMonitoring.teams.delete(teamId);
+
+      if (countryMonitoring.teams.size === 0) {
+        userMonitoring.delete(countrySlug);
+      }
+
+      if (userMonitoring.size === 0) {
+        this.monitoredPlayers.delete(chatId);
+      }
     }
 
     const teams = await this.dataprojectApiService
@@ -201,6 +211,7 @@ export class TelegramService implements OnApplicationBootstrap {
       }
     }
   }
+
   private sendMainMenu(chatId: number) {
     const keyboard = {
       inline_keyboard: [
