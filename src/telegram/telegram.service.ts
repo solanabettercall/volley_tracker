@@ -5,14 +5,24 @@ import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api
 import { TeamInfo } from 'src/providers/dataproject/interfaces/team-info.interface';
 import { countries, CountrySlug } from 'src/providers/dataproject/types';
 
+interface MonitoredTeam {
+  teamId: number;
+  players: Set<number>;
+}
+
+interface MonitoredCountry {
+  countrySlug: CountrySlug;
+  teams: Map<number, MonitoredTeam>;
+}
+
+type UserMonitoring = Map<CountrySlug, MonitoredCountry>;
+type MonitoredPlayersStorage = Map<number, UserMonitoring>;
+
 @Injectable()
 export class TelegramService implements OnApplicationBootstrap {
   private readonly telegramBot: TelegramBot;
 
-  private monitoredPlayers: Record<
-    number,
-    Record<string, Record<number, number[]>>
-  > = {};
+  private monitoredPlayers: MonitoredPlayersStorage = new Map();
 
   constructor(private readonly dataprojectApiService: DataprojectApiService) {
     this.telegramBot = new TelegramBot(appConfig.tg.token, { polling: true });
@@ -86,9 +96,8 @@ export class TelegramService implements OnApplicationBootstrap {
     countrySlug: CountrySlug,
     teamId: number,
     playerId: number,
-    messageId: number, // Добавляем ID сообщения для редактирования
+    messageId: number,
   ) {
-    const citySlug = countrySlug; // Используем citySlug как countrySlug
     Logger.debug('togglePlayer', {
       chatId,
       countrySlug,
@@ -96,57 +105,62 @@ export class TelegramService implements OnApplicationBootstrap {
       playerId,
     });
 
-    // Инициализируем структуру данных, если её нет
-    if (!this.monitoredPlayers[chatId]) {
-      this.monitoredPlayers[chatId] = {};
-    }
-    if (!this.monitoredPlayers[chatId][citySlug]) {
-      this.monitoredPlayers[chatId][citySlug] = {};
-    }
-    if (!this.monitoredPlayers[chatId][citySlug][teamId]) {
-      this.monitoredPlayers[chatId][citySlug][teamId] = [];
+    if (!this.monitoredPlayers.has(chatId)) {
+      this.monitoredPlayers.set(chatId, new Map());
     }
 
-    // Проверка на наличие игрока в списке
-    const playerIndex =
-      this.monitoredPlayers[chatId]?.[citySlug]?.[teamId]?.indexOf(playerId);
+    const userMonitoring = this.monitoredPlayers.get(chatId)!;
 
-    if (playerIndex === -1) {
-      // Добавляем игрока в список мониторинга
-      this.monitoredPlayers[chatId][citySlug][teamId].push(playerId);
-    } else {
-      // Удаляем игрока из списка мониторинга
-      this.monitoredPlayers[chatId][citySlug][teamId].splice(playerIndex, 1);
-      // Если больше нет игроков, удаляем запись о команде
-      if (this.monitoredPlayers[chatId][citySlug][teamId].length === 0) {
-        delete this.monitoredPlayers[chatId][citySlug][teamId];
+    if (!userMonitoring.has(countrySlug)) {
+      userMonitoring.set(countrySlug, {
+        countrySlug,
+        teams: new Map(),
+      });
+    }
+
+    const monitoredCountry = userMonitoring.get(countrySlug)!;
+
+    if (!monitoredCountry.teams.has(teamId)) {
+      monitoredCountry.teams.set(teamId, {
+        teamId,
+        players: new Set(),
+      });
+    }
+
+    const monitoredTeam = monitoredCountry.teams.get(teamId)!;
+
+    if (monitoredTeam.players.has(playerId)) {
+      monitoredTeam.players.delete(playerId);
+
+      if (monitoredTeam.players.size === 0) {
+        monitoredCountry.teams.delete(teamId);
       }
+
+      if (monitoredCountry.teams.size === 0) {
+        userMonitoring.delete(countrySlug);
+      }
+
+      if (userMonitoring.size === 0) {
+        this.monitoredPlayers.delete(chatId);
+      }
+    } else {
+      monitoredTeam.players.add(playerId);
     }
 
-    // Получаем список игроков для команды
     const players = await this.dataprojectApiService
       .getClient(countrySlug)
       .getTeamRoster(teamId);
 
-    const teams = await this.dataprojectApiService
-      .getClient(countrySlug)
-      .getAllTeams();
-    const team = teams.find((t) => t.id === teamId);
-    const country = countries.find((c) => c.slug === countrySlug);
+    const monitoredPlayerIds = monitoredTeam?.players ?? new Set();
 
-    const monitoredPlayers =
-      this.monitoredPlayers[chatId]?.[citySlug]?.[teamId] || [];
-
-    // Создаем клавиатуру
     const keyboard = players.map((player) => [
       {
-        text: `${monitoredPlayers.includes(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
+        text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
         callback_data: `toggle_player:${countrySlug}:${teamId}:${player.id}`,
       },
     ]);
 
-    // Если есть активные игроки в мониторинге, добавляем кнопку для прекращения мониторинга
-    if (monitoredPlayers.length > 0) {
+    if (monitoredPlayerIds.size > 0) {
       keyboard.push([
         {
           text: '🚫 Прекратить мониторинг команды',
@@ -155,13 +169,11 @@ export class TelegramService implements OnApplicationBootstrap {
       ]);
     }
 
-    // Добавляем кнопки для возврата
     keyboard.push([
       { text: '⬅️ Назад', callback_data: `back_to_teams:${countrySlug}` },
       { text: '🏠 На главную', callback_data: 'back_to_main' },
     ]);
 
-    // Обновляем клавиатуру в сообщении
     await this.telegramBot.editMessageReplyMarkup(
       { inline_keyboard: keyboard },
       { chat_id: chatId, message_id: messageId },
@@ -173,21 +185,16 @@ export class TelegramService implements OnApplicationBootstrap {
     countrySlug: CountrySlug,
     teamId: number,
   ) {
-    // Используем citySlug вместо countrySlug
-    const citySlug = countrySlug; // или извлекаем citySlug из другого источника
-
-    if (this.monitoredPlayers[chatId]?.[citySlug]?.[teamId]) {
-      delete this.monitoredPlayers[chatId][citySlug][teamId];
+    if (this.monitoredPlayers[chatId]?.[countrySlug]?.[teamId]) {
+      delete this.monitoredPlayers[chatId][countrySlug][teamId];
     }
 
-    // Получаем данные команды
     const teams = await this.dataprojectApiService
       .getClient(countrySlug)
       .getAllTeams();
     const team = teams.find((t) => t.id === teamId);
 
     if (team) {
-      // Определяем страну по команде
       const country = countries.find((c) => c.slug === countrySlug);
       if (country) {
         this.sendTeams(chatId, country.slug);
@@ -249,7 +256,6 @@ export class TelegramService implements OnApplicationBootstrap {
     const country = countries.find((c) => c.slug === countrySlug);
     if (!country) return;
 
-    // const teamList = this.teamsData[countrySlug] || [];
     const client = this.dataprojectApiService.getClient(countrySlug);
     const teamList = await client.getAllTeams();
     const keyboard = teamList.map((team) => [
@@ -283,20 +289,25 @@ export class TelegramService implements OnApplicationBootstrap {
     const teams = await this.dataprojectApiService
       .getClient(countrySlug)
       .getAllTeams();
+
     const team = teams.find((t) => t.id === teamId);
     const country = countries.find((c) => c.slug === countrySlug);
 
-    const monitoredPlayers =
-      this.monitoredPlayers[chatId]?.[countrySlug]?.[teamId] || [];
+    const userMonitoring = this.monitoredPlayers.get(chatId);
+    const countryMonitoring = userMonitoring?.get(countrySlug);
+    const teamMonitoring = countryMonitoring?.teams.get(teamId);
+    const monitoredPlayers = teamMonitoring
+      ? teamMonitoring.players
+      : new Set();
 
     const keyboard = players.map((player) => [
       {
-        text: `${monitoredPlayers.includes(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
+        text: `${monitoredPlayers.has(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
         callback_data: `toggle_player:${countrySlug}:${teamId}:${player.id}`,
       },
     ]);
 
-    if (monitoredPlayers.length > 0) {
+    if (monitoredPlayers.size > 0) {
       keyboard.push([
         {
           text: '🚫 Прекратить мониторинг команды',
@@ -322,9 +333,9 @@ export class TelegramService implements OnApplicationBootstrap {
   }
 
   private async sendMonitoringStatus(chatId: number) {
-    const monitored = this.monitoredPlayers[chatId];
+    const monitored = this.monitoredPlayers.get(chatId);
 
-    if (!monitored || Object.keys(monitored).length === 0) {
+    if (!monitored || monitored.size === 0) {
       this.telegramBot.sendMessage(
         chatId,
         'Сейчас у вас нет активного мониторинга игроков.',
@@ -347,31 +358,30 @@ export class TelegramService implements OnApplicationBootstrap {
 
     let message = '📊 Ваш текущий мониторинг:\n\n';
 
-    // Проходим по всем странам и командам
-    for (const [citySlug, teams] of Object.entries(monitored)) {
-      // Получаем все команды для данного города
+    for (const [countrySlug, country] of monitored.entries()) {
       const teamList = await this.dataprojectApiService
-        .getClient(citySlug as CountrySlug)
+        .getClient(countrySlug)
         .getAllTeams();
 
-      // Проходим по всем командам, которые находятся под мониторингом
-      for (const [teamId, playerIds] of Object.entries(teams)) {
-        const team = teamList.find((t) => t.id === parseInt(teamId));
-        const country = countries.find((c) => c.slug === citySlug);
+      for (const [teamId, teamData] of country.teams.entries()) {
+        const team = teamList.find((t) => t.id === teamId);
+        const countryMeta = countries.find((c) => c.slug === countrySlug);
 
-        if (!team || !country) continue;
+        if (!team || !countryMeta) continue;
 
         const teamRoster = await this.dataprojectApiService
-          .getClient(citySlug as CountrySlug)
-          .getTeamRoster(+teamId);
+          .getClient(countrySlug)
+          .getTeamRoster(teamId);
 
-        const players = teamRoster.filter((p) => playerIds.includes(p.id));
+        const players = teamRoster.filter((p) => teamData.players.has(p.id));
 
-        message += `*${country.emoji} ${country.name} - ${team.name}:*\n`;
-        message += players
-          .map((p) => `• #${p.number} ${p.fullName}`)
-          .join('\n');
-        message += '\n\n';
+        if (players.length > 0) {
+          message += `*${countryMeta.emoji} ${countryMeta.name} - ${team.name}:*\n`;
+          message += players
+            .map((p) => `• #${p.number} ${p.fullName}`)
+            .join('\n');
+          message += '\n\n';
+        }
       }
     }
 
@@ -385,9 +395,13 @@ export class TelegramService implements OnApplicationBootstrap {
       ],
     ];
 
-    this.telegramBot.sendMessage(chatId, message, {
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: keyboard },
-    });
+    this.telegramBot.sendMessage(
+      chatId,
+      message || 'Пока нет игроков в мониторинге.',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: keyboard },
+      },
+    );
   }
 }
