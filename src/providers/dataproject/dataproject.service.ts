@@ -14,8 +14,9 @@ export class DataprojectMonitorService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap() {
-    // const client = this.dataprojectApiService.getClient('hos');
-    // const matches = await client.getMatchesInfo();
+    // const client = this.dataprojectApiService.getClient('ossrb');
+    // const teams = await client.getAllTeams();
+    // console.log(teams);
     // console.log(matches);
     // await this.enqueueAllCountries();
   }

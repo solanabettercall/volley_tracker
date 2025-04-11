@@ -8,6 +8,7 @@ import Redis from 'ioredis';
 import { MatchInfo } from './interfaces/match-info.interface';
 import { PlayerInfo } from './interfaces/player-info.interface';
 import { CountrySlug } from './types';
+import { TeamInfo } from './interfaces/team-info.interface';
 
 type RawMatch = {
   id: number;
@@ -22,6 +23,35 @@ class DataprojectCountryClient {
   ) {}
 
   private connectionToken: string = null;
+
+  protected async getAllTeams() {
+    Logger.debug('getAllTeams');
+    const url = `https://${this.countrySlug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
+    type RawTeam = Pick<TeamInfo, 'id' | 'name'>;
+    const teams: RawTeam[] = [];
+
+    try {
+      const response = await this.httpService.axiosRef.get(url);
+      const $ = cheerio.load(response.data);
+
+      $('div.RadAjaxPanel div.rlvI[onclick]').each((_, element) => {
+        const onclick = $(element).attr('onclick') ?? '';
+        const teamName = $(element).find('h4').text().trim();
+
+        const match = onclick.match(/TeamID=(\d+)/);
+        const teamId = match ? Number(match[1]) : 0;
+
+        teams.push({
+          id: teamId,
+          name: teamName,
+        });
+      });
+    } catch (e) {
+      console.error('Error fetching live matches:', e);
+    }
+
+    return teams;
+  }
 
   private getTimestamp(): number {
     return moment().valueOf();
@@ -70,6 +100,8 @@ class DataprojectCountryClient {
   }
 
   protected async getRawMatchs(): Promise<RawMatch[]> {
+    Logger.debug('getRawMatchs');
+
     const url = `https://${this.countrySlug}-web.dataproject.com/MainLiveScore.aspx`;
     const matches: RawMatch[] = [];
 
@@ -120,6 +152,8 @@ class DataprojectCountryClient {
   }
 
   protected async getMatchesInfo(rawMatches: RawMatch[]): Promise<MatchInfo[]> {
+    Logger.debug('getMatchesInfo');
+
     const connectionToken = await this.ensureConnectionToken();
     const matchIds = rawMatches.map((m) => m.id);
     const competitionMap = new Map(
@@ -236,6 +270,8 @@ class DataprojectCountryClient {
     matchId: number,
     teamId: number,
   ): Promise<PlayerInfo[]> {
+    Logger.debug('getTeamPlayersFromMatch');
+
     const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":0}`;
 
     const connectionToken = await this.ensureConnectionToken();
@@ -281,6 +317,8 @@ class DataprojectCountryClient {
   }
 
   protected async getTeamRoster(teamId: number) {
+    Logger.debug('getTeamRoster');
+
     const url = `https://${this.countrySlug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
     const headers = {
       Host: `${this.countrySlug}-web.dataproject.com`,
@@ -334,15 +372,17 @@ class DataprojectCountryClient {
             });
           }
         });
-
+      Logger.debug(`Команда ${teamId} игроков ${players.length}`);
       return players;
     } catch (error) {
-      console.error('Ошибка при получении состава команды:', error);
+      Logger.error('Ошибка при получении состава команды:', error);
       return [];
     }
   }
 
   protected async getMatchActivePlayerIds(matchId: number): Promise<number[]> {
+    Logger.debug('getMatchActivePlayerIds');
+
     const connectionToken = await this.ensureConnectionToken();
 
     const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.countrySlug}"],"I":0}`;
@@ -443,6 +483,10 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
   public override getTeamRoster(teamId: number): Promise<PlayerInfo[]> {
     const key = `country:${this.countrySlug}:teamRoster:${teamId}`;
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
+  }
+  public override getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
+    const key = `country:${this.countrySlug}:teams`;
+    return this.getOrSetCache(key, () => super.getAllTeams());
   }
 }
 
