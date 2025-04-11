@@ -459,7 +459,7 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     port: appConfig.redis.port,
   });
 
-  private readonly defaultTtl = 120; // в секундах
+  private readonly defaultTtl = 3600; // в секундах
 
   private async getOrSetCache<T>(
     key: string,
@@ -475,17 +475,17 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
   }
 
   protected override getRawMatchs(): Promise<RawMatch[]> {
-    // const key = `country:${this.countrySlug}:matchIds`;
-    // return this.getOrSetCache(key, () => super.getMatchIds());
-    return super.getRawMatchs();
+    const key = `country:${this.countrySlug}:matchIds`;
+    return this.getOrSetCache(key, () => super.getRawMatchs());
+    // return super.getRawMatchs();
   }
 
   public override async getMatchesInfo(): Promise<MatchInfo[]> {
     const matchIds = await this.getRawMatchs();
-    // const key = `country:${this.countrySlug}:matchesInfo:${matchIds.sort().join(',')}`;
-    // return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds));
+    const key = `country:${this.countrySlug}:matchesInfo:${matchIds.sort().join(',')}`;
+    return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds));
 
-    return super.getMatchesInfo(matchIds);
+    // return super.getMatchesInfo(matchIds);
   }
 
   protected override getTeamPlayersFromMatch(
@@ -503,9 +503,9 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
   }
   public override getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    // const key = `country:${this.countrySlug}:teams`;
-    // return this.getOrSetCache(key, () => super.getAllTeams());
-    return super.getAllTeams();
+    const key = `country:${this.countrySlug}:teams`;
+    return this.getOrSetCache(key, () => super.getAllTeams());
+    // return super.getAllTeams();
   }
 }
 

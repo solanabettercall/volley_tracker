@@ -23,8 +23,7 @@ import { MongooseModule } from '@nestjs/mongoose';
     }),
     TelegramModule,
     MongooseModule.forRoot(
-      `mongodb://${appConfig.db.host}:${appConfig.db.port}/${appConfig.db.database}`,
-      {},
+      `mongodb://${appConfig.db.username}:${appConfig.db.password}@${appConfig.db.host}:${appConfig.db.port}/${appConfig.db.database}?authSource=admin`,
     ),
   ],
   controllers: [AppController],
