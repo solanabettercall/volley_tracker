@@ -31,13 +31,31 @@ class DataprojectCountryClient {
     const teams: RawTeam[] = [];
 
     try {
-      const response = await this.httpService.axiosRef.get(url);
+      const params = {};
+      if (this.countrySlug === 'qva') {
+        // Фикс для Катара
+        params['ID'] = 22;
+      }
+      const response = await this.httpService.axiosRef.get(url, {
+        headers: {
+          Host: `${this.countrySlug}-web.dataproject.com`,
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'same-origin',
+          Priority: 'u=0, i',
+        },
+        params,
+      });
       const $ = cheerio.load(response.data);
-
       $('div.RadAjaxPanel div.rlvI[onclick]').each((_, element) => {
         const onclick = $(element).attr('onclick') ?? '';
         const teamName = $(element).find('h4').text().trim();
-
         const match = onclick.match(/TeamID=(\d+)/);
         const teamId = match ? Number(match[1]) : 0;
 
@@ -47,7 +65,7 @@ class DataprojectCountryClient {
         });
       });
     } catch (e) {
-      console.error('Error fetching live matches:', e);
+      Logger.error('Ошибка при получении всех команд федерации:', e);
     }
 
     return teams;
@@ -485,8 +503,9 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
   }
   public override getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    const key = `country:${this.countrySlug}:teams`;
-    return this.getOrSetCache(key, () => super.getAllTeams());
+    // const key = `country:${this.countrySlug}:teams`;
+    // return this.getOrSetCache(key, () => super.getAllTeams());
+    return super.getAllTeams();
   }
 }
 
