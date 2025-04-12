@@ -46,6 +46,14 @@ export class MonitoringService {
     return this.monitoredTeamModel.find(query).exec();
   }
 
+  async getAllMonitoredTeams(countrySlug?: string): Promise<MonitoredTeam[]> {
+    const query: any = {};
+    if (countrySlug) {
+      query.countrySlug = countrySlug;
+    }
+    return this.monitoredTeamModel.find(query).exec();
+  }
+
   async getPlayersForTeam(
     userId: number,
     countrySlug: string,

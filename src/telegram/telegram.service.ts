@@ -8,6 +8,7 @@ import { countries, CountrySlug } from 'src/providers/dataproject/types';
 
 import { MonitoredTeam } from '../schemas/monitoring.schema';
 import { MonitoringService } from 'src/monitoring/monitoring.service';
+import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
 
 @Injectable()
 export class TelegramService implements OnApplicationBootstrap {
@@ -282,6 +283,33 @@ export class TelegramService implements OnApplicationBootstrap {
       .getClient(countrySlug)
       .getTeamRoster(teamId);
 
+    const matches = await this.dataprojectApiService
+      .getClient(countrySlug as CountrySlug)
+      .getMatchesInfo();
+
+    const liveTeam = matches
+      .flatMap((m) => [m.home, m.guest])
+      .find((t) => t.id === teamId);
+
+    let allPlayers = [...players];
+
+    // Если есть liveTeam и у нее есть игроки, объединяем их
+    if (liveTeam?.players) {
+      // Используем Map для обеспечения уникальности по id
+      const playersMap = new Map<number, PlayerInfo>();
+
+      // Сначала добавляем игроков из основного списка
+      players.forEach((player) => playersMap.set(player.id, player));
+
+      // Затем добавляем игроков из liveTeam (перезаписываем только если их нет в основном списке)
+      liveTeam.players.forEach((player) => {
+        if (!playersMap.has(player.id)) {
+          playersMap.set(player.id, player);
+        }
+      });
+      allPlayers = Array.from(playersMap.values());
+    }
+
     const teams = await this.dataprojectApiService
       .getClient(countrySlug)
       .getAllTeams();
@@ -297,7 +325,7 @@ export class TelegramService implements OnApplicationBootstrap {
       ),
     );
 
-    const keyboard = players.map((player) => [
+    const keyboard = allPlayers.map((player) => [
       {
         text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
         callback_data: `toggle_player:${countrySlug}:${teamId}:${player.id}`,
@@ -366,27 +394,38 @@ export class TelegramService implements OnApplicationBootstrap {
 
     for (const teamData of monitoredTeams) {
       const monitoredTeam = teamData as MonitoredTeam;
-
       const { teamId, players, countrySlug } = monitoredTeam;
+
+      // Пропускаем команды без игроков
+      if (!players || players.length === 0) continue;
 
       const teamList = await this.dataprojectApiService
         .getClient(countrySlug as CountrySlug)
         .getAllTeams();
 
-      const team = teamList.find((t) => t.id === teamId);
-      if (!team) continue;
-
-      const teamRoster = await this.dataprojectApiService
+      const matches = await this.dataprojectApiService
         .getClient(countrySlug as CountrySlug)
-        .getTeamRoster(teamId);
+        .getMatchesInfo();
 
-      const monitoredPlayerIds = new Set(players);
+      const liveTeams = matches.flatMap((m) => [m.guest, m.home]);
 
-      const playersInMonitoring = teamRoster.filter(
-        (p) => monitoredPlayerIds.has(p.id), // Используем has вместо includes для Set
-      );
+      const allTeamsMap = new Map();
 
-      const playerCount = playersInMonitoring.length;
+      // Сначала добавляем команды из teamList
+      teamList.forEach((team) => allTeamsMap.set(team.id, team));
+
+      // Затем добавляем команды из liveTeams, но они не перезапишут существующие
+      liveTeams.forEach((team) => {
+        if (!allTeamsMap.has(team.id)) {
+          allTeamsMap.set(team.id, team);
+        }
+      });
+
+      // Получаем объединенный массив
+      const allTeams = Array.from(allTeamsMap.values());
+
+      const team = allTeams.find((t) => t.id === teamId);
+      if (!team) continue;
 
       const country = countries.find((c) => c.slug === countrySlug);
       const countryEmoji = country ? country.emoji : '🌍';
@@ -394,10 +433,13 @@ export class TelegramService implements OnApplicationBootstrap {
       if (!countriesMap[countrySlug]) {
         countriesMap[countrySlug] = {
           countryName: country?.name || countrySlug,
-          countryEmoji: countryEmoji,
+          countryEmoji,
           teams: [],
         };
       }
+
+      // Просто считаем длину массива отслеживаемых игроков
+      const playerCount = players.length;
 
       countriesMap[countrySlug].teams.push(
         `*${team.name}:* (${playerCount} игроков)`,
