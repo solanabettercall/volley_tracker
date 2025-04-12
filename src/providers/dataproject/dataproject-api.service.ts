@@ -25,7 +25,7 @@ class DataprojectCountryClient {
   private connectionToken: string = null;
 
   protected async getAllTeams() {
-    Logger.debug('getAllTeams');
+    //Logger.debug('getAllTeams');
     const url = `https://${this.countrySlug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
     type RawTeam = Pick<TeamInfo, 'id' | 'name'>;
     const teams: RawTeam[] = [];
@@ -118,7 +118,7 @@ class DataprojectCountryClient {
   }
 
   protected async getRawMatchs(): Promise<RawMatch[]> {
-    Logger.debug('getRawMatchs');
+    // Logger.debug('getRawMatchs');
 
     const url = `https://${this.countrySlug}-web.dataproject.com/MainLiveScore.aspx`;
     const matches: RawMatch[] = [];
@@ -170,7 +170,7 @@ class DataprojectCountryClient {
   }
 
   protected async getMatchesInfo(rawMatches: RawMatch[]): Promise<MatchInfo[]> {
-    Logger.debug('getMatchesInfo');
+    // Logger.debug('getMatchesInfo');
 
     const connectionToken = await this.ensureConnectionToken();
     const matchIds = rawMatches.map((m) => m.id);
@@ -288,7 +288,7 @@ class DataprojectCountryClient {
     matchId: number,
     teamId: number,
   ): Promise<PlayerInfo[]> {
-    Logger.debug('getTeamPlayersFromMatch');
+    // Logger.debug('getTeamPlayersFromMatch');
 
     const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.countrySlug}"],"I":0}`;
 
@@ -335,7 +335,7 @@ class DataprojectCountryClient {
   }
 
   protected async getTeamRoster(teamId: number) {
-    Logger.debug('getTeamRoster');
+    // Logger.debug('getTeamRoster');
 
     const url = `https://${this.countrySlug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
     const headers = {
@@ -390,7 +390,7 @@ class DataprojectCountryClient {
             });
           }
         });
-      Logger.debug(`Команда ${teamId} игроков ${players.length}`);
+      // Logger.debug(`Команда ${teamId} игроков ${players.length}`);
       return players;
     } catch (error) {
       Logger.error('Ошибка при получении состава команды:', error);
@@ -399,7 +399,7 @@ class DataprojectCountryClient {
   }
 
   protected async getMatchActivePlayerIds(matchId: number): Promise<number[]> {
-    Logger.debug('getMatchActivePlayerIds');
+    // Logger.debug('getMatchActivePlayerIds');
 
     const connectionToken = await this.ensureConnectionToken();
 

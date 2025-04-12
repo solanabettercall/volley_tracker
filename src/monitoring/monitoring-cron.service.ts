@@ -1,0 +1,30 @@
+import { InjectQueue } from '@nestjs/bull';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { Queue } from 'bull';
+import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api.service';
+import { MONITOR_QUEUE } from 'src/providers/dataproject/monitor.consts';
+import { countries } from 'src/providers/dataproject/types';
+
+@Injectable()
+export class MonitoringCronService implements OnApplicationBootstrap {
+  constructor(
+    // private readonly dataprojectApiService: DataprojectApiService,
+    @InjectQueue(MONITOR_QUEUE) private monitorQueue: Queue,
+  ) {}
+
+  async onApplicationBootstrap() {
+    Logger.debug(this.constructor.name);
+    // const client = this.dataprojectApiService.getClient('ossrb');
+    // const teams = await client.getAllTeams();
+    // console.log(teams);
+    await this.enqueueAllCountries();
+  }
+
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async enqueueAllCountries() {
+    for (const country of countries) {
+      await this.monitorQueue.add('monitor-country', { country });
+    }
+  }
+}

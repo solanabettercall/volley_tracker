@@ -1,14 +1,7 @@
 import { Module } from '@nestjs/common';
-import {
-  DataprojectApiService,
-  DataprojectCountryCacheClient,
-} from './dataproject-api.service';
+import { DataprojectApiService } from './dataproject-api.service';
 import { DataprojectController } from './dataproject.controller';
 import { HttpModule } from '@nestjs/axios';
-import { DataprojectMonitorService } from './dataproject.service';
-import { DataprojectMonitorProcessor } from './dataproject-monitor.processor';
-import { BullModule } from '@nestjs/bull';
-import { MONITOR_QUEUE } from './monitor.consts';
 
 @Module({
   imports: [
@@ -19,13 +12,8 @@ import { MONITOR_QUEUE } from './monitor.consts';
         protocol: 'http',
       },
     }),
-    BullModule.registerQueue({ name: MONITOR_QUEUE }),
   ],
-  providers: [
-    DataprojectApiService,
-    DataprojectMonitorService,
-    DataprojectMonitorProcessor,
-  ],
+  providers: [DataprojectApiService],
   controllers: [DataprojectController],
   exports: [DataprojectApiService],
 })
