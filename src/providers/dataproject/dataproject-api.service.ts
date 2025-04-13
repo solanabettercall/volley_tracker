@@ -459,7 +459,7 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     port: appConfig.redis.port,
   });
 
-  private readonly defaultTtl = 3600; // в секундах
+  private readonly defaultTtl = 360; // в секундах
 
   private async getOrSetCache<T>(
     key: string,

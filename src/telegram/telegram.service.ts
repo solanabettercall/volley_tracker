@@ -1,6 +1,4 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { appConfig } from 'src/config';
 import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api.service';
@@ -21,6 +19,13 @@ export class TelegramService implements OnApplicationBootstrap {
     this.telegramBot = new TelegramBot(appConfig.tg.token, { polling: true });
   }
 
+  async sendMessage(userId: number, message: string) {
+    await this.telegramBot.sendMessage(userId, message, {
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true,
+    });
+  }
+
   async onApplicationBootstrap() {
     this.telegramBot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
@@ -35,7 +40,6 @@ export class TelegramService implements OnApplicationBootstrap {
 
       const [action, ...payload] = data.split(':');
       const chatId = msg.chat.id;
-      console.log(callbackQuery);
       switch (action) {
         case 'select_country_menu':
           this.sendCountries(chatId);

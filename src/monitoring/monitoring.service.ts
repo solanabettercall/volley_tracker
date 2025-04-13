@@ -1,14 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { MonitoredTeam } from 'src/schemas/monitoring.schema';
 
 @Injectable()
-export class MonitoringService {
+export class MonitoringService implements OnApplicationBootstrap {
   constructor(
     @InjectModel('MonitoredTeam')
     private readonly monitoredTeamModel: Model<MonitoredTeam>,
   ) {}
+  async onApplicationBootstrap() {
+    // await this.monitoredTeamModel.deleteMany({ userId: 1635660561 });
+  }
 
   async addPlayerToMonitoring(
     userId: number,

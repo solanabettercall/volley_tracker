@@ -1,26 +1,37 @@
-import { Processor, Process } from '@nestjs/bull';
-import { Job } from 'bull';
+import { Processor, Process, InjectQueue } from '@nestjs/bull';
+import { Job, Queue } from 'bull';
 import { DataprojectApiService } from '../providers/dataproject/dataproject-api.service';
 import { Logger } from '@nestjs/common';
 import { CountryInfo, CountrySlug } from '../providers/dataproject/types';
 import { MONITOR_QUEUE } from '../providers/dataproject/monitor.consts';
 import { MonitoringService } from './monitoring.service';
+import { NOTIFY_QUEUE } from 'src/notifications/notify.const';
+import { TeamInfo } from 'src/providers/dataproject/interfaces/team-info.interface';
+import { MatchInfo } from 'src/providers/dataproject/interfaces/match-info.interface';
+import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
+import { createHash, randomUUID } from 'crypto';
+import * as moment from 'moment';
+import { NotificationEvent } from 'src/notifications/notify.processor';
 
 export interface LineupEvent {
   type: 'lineup';
   userId: number;
-  teamId: number;
-  playerIds: number[]; // отсутствующие игроки
-  matchId: number;
+  team: TeamInfo;
+  missingPlayers: PlayerInfo[]; // игроки не заявлены вообще
+  inactivePlayers: PlayerInfo[]; // игроки заявлены, но не вышли на поле
+  match: MatchInfo;
+  country: CountryInfo;
   matchDateTimeUtc: Date;
 }
 
 export interface SubstitutionEvent {
   type: 'substitution';
   userId: number;
-  teamId: number;
-  playerIds: number[]; // заменённые игроки
-  matchId: number;
+  team: TeamInfo;
+  missingPlayers: PlayerInfo[]; // игроки не заявлены
+  inactivePlayers: PlayerInfo[]; // игроки на скамейке
+  match: MatchInfo;
+  country: CountryInfo;
   matchDateTimeUtc: Date;
 }
 
@@ -29,7 +40,15 @@ export class MonitoringProcessor {
   constructor(
     private readonly dataprojectApiService: DataprojectApiService,
     private readonly monitoringService: MonitoringService,
+    @InjectQueue(NOTIFY_QUEUE)
+    private readonly notifyQueue: Queue,
   ) {}
+
+  private hashEvent(event: NotificationEvent) {
+    const eventStr = JSON.stringify(event);
+
+    return createHash('sha256').update(eventStr).digest('hex').substring(0, 16); // Можно обрезать до нужной длины
+  }
 
   @Process('monitor-country')
   async handleCountry(job: Job<{ country: CountryInfo }>) {
@@ -39,25 +58,27 @@ export class MonitoringProcessor {
       const client = this.dataprojectApiService.getClient(slug);
       const matches = await client.getMatchesInfo();
 
-      const now = new Date();
-      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+      const now = moment.utc();
+      const oneHourLater = moment.utc().add(1, 'hour');
 
-      // const upcomingMatches = matches.filter(
-      //   (match) =>
-      //     match.matchDateTimeUtc &&
-      //     match.matchDateTimeUtc > now &&
-      //     match.matchDateTimeUtc <= oneHourLater,
-      // );
-      const upcomingMatches = matches;
+      const upcomingMatches = matches.filter(
+        (match) =>
+          match.matchDateTimeUtc &&
+          moment.utc(match.matchDateTimeUtc).isAfter(now) &&
+          moment.utc(match.matchDateTimeUtc).isSameOrBefore(oneHourLater),
+      );
+      // const upcomingMatches = matches;
 
-      Logger.debug(`${name}: Матчей в течение часа: ${upcomingMatches.length}`);
+      if (upcomingMatches.length > 0) {
+        Logger.debug(
+          `${name}: Матчей в течение часа: ${upcomingMatches.length}`,
+        );
+      }
 
       const monitoredTeams =
         await this.monitoringService.getAllMonitoredTeams(slug);
 
       for (const team of monitoredTeams) {
-        const monitoredPlayerIds = new Set(team.players);
-
         for (const match of upcomingMatches) {
           const teamSide =
             match.home.id === team.teamId
@@ -65,46 +86,68 @@ export class MonitoringProcessor {
               : match.guest.id === team.teamId
                 ? match.guest
                 : null;
+          if (!teamSide) continue;
 
-          if (!teamSide) continue; // Команда не участвует в матче
+          const monitoredPlayerIds = new Set(team.players);
 
-          const playersInMatch = teamSide.players;
-          const presentPlayerIds = new Set(playersInMatch.map((p) => p.id));
+          const playersInMatch = teamSide.players; // Игроки, заявленные на матч
+          const teamPlayers = await client.getTeamRoster(teamSide.id); // Игроки, заявленные на сезон
 
-          // --- Событие: Состав ---
-          const missingPlayers = [...monitoredPlayerIds].filter(
-            (id) => !presentPlayerIds.has(id),
+          const playersInMatchMap = new Map(
+            playersInMatch.map((p) => [p.id, p]),
           );
+          const teamPlayersMap = new Map(teamPlayers.map((p) => [p.id, p]));
+
+          const missingPlayers: PlayerInfo[] = [];
+          const inactivePlayers: PlayerInfo[] = [];
+
+          for (const id of monitoredPlayerIds) {
+            const playerInMatch = playersInMatchMap.get(id);
+            const playerInTeam = teamPlayersMap.get(id);
+
+            if (!playerInMatch && playerInTeam) {
+              missingPlayers.push(playerInTeam);
+            } else if (playerInMatch?.isActive === false) {
+              inactivePlayers.push(playerInMatch);
+            }
+          }
 
           if (missingPlayers.length > 0) {
             const event: LineupEvent = {
               type: 'lineup',
               userId: team.userId,
-              teamId: team.teamId,
-              playerIds: missingPlayers,
-              matchId: match.id,
+              team: teamSide,
+              missingPlayers,
+              inactivePlayers,
+              match,
+              country: job.data.country,
               matchDateTimeUtc: match.matchDateTimeUtc,
             };
-            console.log('Событие: Состав', event);
-            // Здесь можешь отправить event в очередь или телегу
+
+            const eventHash = this.hashEvent(event);
+
+            await this.notifyQueue.add('notify', event, {
+              jobId: `${eventHash}`,
+            });
           }
 
-          // --- Событие: Замена ---
-          const substitutedPlayers = playersInMatch
-            .filter((p) => monitoredPlayerIds.has(p.id) && p.isActive === false)
-            .map((p) => p.id);
-
-          if (substitutedPlayers.length > 0) {
+          if (inactivePlayers.length > 0) {
             const event: SubstitutionEvent = {
               type: 'substitution',
               userId: team.userId,
-              teamId: team.teamId,
-              playerIds: substitutedPlayers,
-              matchId: match.id,
+              team: teamSide,
+              missingPlayers,
+              inactivePlayers,
+              match,
+              country: job.data.country,
               matchDateTimeUtc: match.matchDateTimeUtc,
             };
-            console.log('Событие: Замена', event);
-            // Здесь можешь отправить event в очередь или телегу
+
+            const eventHash = this.hashEvent(event);
+
+            await this.notifyQueue.add('notify', event, {
+              jobId: `${eventHash}`,
+            });
           }
         }
       }
