@@ -59,12 +59,12 @@ export class MonitoringProcessor {
       const matches = await client.getMatchesInfo();
 
       const now = moment.utc();
-      const oneHourLater = moment.utc().add(4, 'hour');
+      const oneHourLater = moment.utc().add(1, 'hour');
 
       const upcomingMatches = matches.filter(
         (match) =>
           match.matchDateTimeUtc &&
-          // moment.utc(match.matchDateTimeUtc).isAfter(now) &&
+          moment.utc(match.matchDateTimeUtc).isAfter(now) &&
           moment.utc(match.matchDateTimeUtc).isSameOrBefore(oneHourLater),
       );
       // const upcomingMatches = matches;
@@ -127,7 +127,7 @@ export class MonitoringProcessor {
             const eventHash = this.hashEvent(event);
 
             await this.notifyQueue.add('notify', event, {
-              jobId: `${eventHash}${randomUUID()}`,
+              jobId: eventHash,
             });
           }
 
@@ -146,7 +146,7 @@ export class MonitoringProcessor {
             const eventHash = this.hashEvent(event);
 
             await this.notifyQueue.add('notify', event, {
-              jobId: `${eventHash}${randomUUID()}`,
+              jobId: eventHash,
             });
           }
         }
