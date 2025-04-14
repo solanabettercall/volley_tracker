@@ -75,7 +75,7 @@ class DataprojectFederationClient {
     const teams: RawTeam[] = [];
     try {
       const params = competitionId ? { ID: competitionId } : {};
-      console.log(params);
+
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
           Host: `${this.federation.slug}-web.dataproject.com`,

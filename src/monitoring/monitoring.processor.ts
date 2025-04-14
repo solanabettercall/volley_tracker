@@ -44,10 +44,27 @@ export class MonitoringProcessor {
     private readonly notifyQueue: Queue,
   ) {}
 
-  private hashEvent(event: NotificationEvent) {
-    const eventStr = JSON.stringify(event);
+  private hashEvent(event: NotificationEvent): string {
+    const {
+      match,
+      matchDateTimeUtc,
+      missingPlayers,
+      inactivePlayers,
+      ...rest
+    } = event;
 
-    return createHash('sha256').update(eventStr).digest('hex').substring(0, 16); // Можно обрезать до нужной длины
+    const normalized = {
+      ...rest,
+      missingPlayerIds: (missingPlayers ?? [])
+        .map((p) => p.id)
+        .sort((a, b) => a - b),
+      inactivePlayerIds: (inactivePlayers ?? [])
+        .map((p) => p.id)
+        .sort((a, b) => a - b),
+    };
+
+    const eventStr = JSON.stringify(normalized);
+    return createHash('sha256').update(eventStr).digest('hex').substring(0, 16);
   }
 
   @Process('monitor-federation')
