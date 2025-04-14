@@ -21,15 +21,11 @@ type RawMatch = {
   matchDateTimeUtc: Date;
 };
 
-class DataprojectCountryClient implements OnApplicationBootstrap {
+class DataprojectCountryClient {
   constructor(
     private readonly httpService: HttpService,
     public readonly country: CountryInfo,
   ) {}
-
-  async onApplicationBootstrap() {
-    throw new Error('Method not implemented.');
-  }
 
   private connectionToken: string = null;
 
@@ -38,6 +34,17 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
     const uniqueTeamIds = new Set<number>();
 
     try {
+      // TODO рефакторинг
+      if (!this.country.competitionIds.length) {
+        const competitionTeams = await this.getTeams();
+        for (const team of competitionTeams) {
+          if (!uniqueTeamIds.has(team.id)) {
+            uniqueTeamIds.add(team.id);
+            allTeams.push(team);
+          }
+        }
+      }
+
       for (const competitionId of this.country.competitionIds) {
         const competitionTeams = await this.getTeams(competitionId);
 
@@ -60,7 +67,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
   }
 
   protected async getTeams(
-    competitionId: number,
+    competitionId?: number,
   ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
     //Logger.debug('getAllTeams');
     const url = `https://${this.country.slug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
@@ -68,9 +75,8 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
     const teams: RawTeam[] = [];
 
     try {
-      const params = {
-        ID: competitionId,
-      };
+      let params = {};
+      if (competitionId) params['ID'] = competitionId;
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
           Host: `${this.country.slug}-web.dataproject.com`,
@@ -555,6 +561,42 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
 @Injectable()
 export class DataprojectApiService {
   private clients: Map<string, DataprojectCountryCacheClient> = new Map();
+
+  async onApplicationBootstrap() {
+    const config = {
+      method: 'get',
+      maxBodyLength: Infinity,
+      url: 'https://eope-web.dataproject.com/Statistics.aspx?ID=14',
+      headers: {
+        Host: 'eope-web.dataproject.com',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        DNT: '1',
+        'Sec-GPC': '1',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        Priority: 'u=0, i',
+      },
+    };
+    const { data } = await this.httpService.axiosRef.request(config);
+
+    const $ = cheerio.load(data);
+    const __VIEWSTATE = $('input[type="hidden"][id="__VIEWSTATE"]').attr(
+      'value',
+    );
+    const __EVENTVALIDATION = $(
+      'input[type="hidden"][id="__EVENTVALIDATION"]',
+    ).attr('value');
+
+    console.log(__EVENTVALIDATION);
+    // throw new Error('Method not implemented.');
+  }
 
   constructor(private readonly httpService: HttpService) {}
 
