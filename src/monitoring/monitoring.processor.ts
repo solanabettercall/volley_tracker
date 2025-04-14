@@ -71,7 +71,7 @@ export class MonitoringProcessor {
 
       if (upcomingMatches.length > 0) {
         Logger.debug(
-          `${name}: Матчей в течение часа: ${upcomingMatches.length}`,
+          `${federation.name}: Матчей в течение часа: ${upcomingMatches.length}`,
         );
       }
 
