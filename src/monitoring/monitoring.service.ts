@@ -1,6 +1,7 @@
 import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { CountryInfo, CountrySlug } from 'src/providers/dataproject/types';
 import { MonitoredTeam } from 'src/schemas/monitoring.schema';
 
 @Injectable()
@@ -49,17 +50,17 @@ export class MonitoringService implements OnApplicationBootstrap {
     return this.monitoredTeamModel.find(query).exec();
   }
 
-  async getAllMonitoredTeams(countrySlug?: string): Promise<MonitoredTeam[]> {
+  async getAllMonitoredTeams(country: CountryInfo): Promise<MonitoredTeam[]> {
     const query: any = {};
-    if (countrySlug) {
-      query.countrySlug = countrySlug;
+    if (country) {
+      query.countrySlug = country.slug;
     }
     return this.monitoredTeamModel.find(query).exec();
   }
 
   async getPlayersForTeam(
     userId: number,
-    countrySlug: string,
+    countrySlug: CountrySlug,
     teamId: number,
   ): Promise<number[]> {
     const team = await this.monitoredTeamModel

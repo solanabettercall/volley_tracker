@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 config();
 
 interface IRedisConfig {
+  defaultTtl: number;
   host: string;
   port: number;
 }
@@ -34,6 +35,7 @@ export const appConfig: IAppConfig = {
   redis: {
     host: process.env.REDIS_HOST ?? 'localhost',
     port: parseInt(process.env.REDIS_PORT) ?? 6379,
+    defaultTtl: parseInt(process.env.REDIS_DEFAULT_TTL) ?? 360,
   },
   db: {
     host: process.env.DB_HOST ?? 'localhost',
