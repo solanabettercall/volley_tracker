@@ -2,7 +2,7 @@ import { Processor, Process, InjectQueue } from '@nestjs/bull';
 import { Job, Queue } from 'bull';
 import { DataprojectApiService } from '../providers/dataproject/dataproject-api.service';
 import { Logger } from '@nestjs/common';
-import { CountryInfo, CountrySlug } from '../providers/dataproject/types';
+import { FederationInfo, FederationSlug } from '../providers/dataproject/types';
 import { MONITOR_QUEUE } from '../providers/dataproject/monitor.consts';
 import { MonitoringService } from './monitoring.service';
 import { NOTIFY_QUEUE } from 'src/notifications/notify.const';
@@ -20,7 +20,7 @@ export interface LineupEvent {
   missingPlayers: PlayerInfo[]; // игроки не заявлены вообще
   inactivePlayers: PlayerInfo[]; // игроки заявлены, но не вышли на поле
   match: MatchInfo;
-  country: CountryInfo;
+  federation: FederationInfo;
   matchDateTimeUtc: Date;
 }
 
@@ -31,7 +31,7 @@ export interface SubstitutionEvent {
   missingPlayers: PlayerInfo[]; // игроки не заявлены
   inactivePlayers: PlayerInfo[]; // игроки на скамейке
   match: MatchInfo;
-  country: CountryInfo;
+  federation: FederationInfo;
   matchDateTimeUtc: Date;
 }
 
@@ -50,12 +50,12 @@ export class MonitoringProcessor {
     return createHash('sha256').update(eventStr).digest('hex').substring(0, 16); // Можно обрезать до нужной длины
   }
 
-  @Process('monitor-country')
-  async handleCountry(job: Job<{ country: CountryInfo }>) {
-    const { country } = job.data;
+  @Process('monitor-federation')
+  async handleFederation(job: Job<{ federation: FederationInfo }>) {
+    const { federation } = job.data;
 
     try {
-      const client = this.dataprojectApiService.getClient(country);
+      const client = this.dataprojectApiService.getClient(federation);
       const matches = await client.getMatchesInfo();
 
       const now = moment.utc();
@@ -76,7 +76,7 @@ export class MonitoringProcessor {
       }
 
       const monitoredTeams =
-        await this.monitoringService.getAllMonitoredTeams(country);
+        await this.monitoringService.getAllMonitoredTeams(federation);
 
       for (const team of monitoredTeams) {
         for (const match of upcomingMatches) {
@@ -120,7 +120,7 @@ export class MonitoringProcessor {
               missingPlayers,
               inactivePlayers,
               match,
-              country: job.data.country,
+              federation: job.data.federation,
               matchDateTimeUtc: match.matchDateTimeUtc,
             };
 
@@ -139,7 +139,7 @@ export class MonitoringProcessor {
               missingPlayers,
               inactivePlayers,
               match,
-              country: job.data.country,
+              federation: job.data.federation,
               matchDateTimeUtc: match.matchDateTimeUtc,
             };
 
@@ -152,7 +152,7 @@ export class MonitoringProcessor {
         }
       }
     } catch (err) {
-      Logger.error(`Ошибка при обработке ${country.slug}: ${err.message}`);
+      Logger.error(`Ошибка при обработке ${federation.slug}: ${err.message}`);
     }
   }
 }

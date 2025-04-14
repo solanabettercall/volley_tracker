@@ -12,7 +12,7 @@ import { appConfig } from 'src/config';
 import Redis from 'ioredis';
 import { MatchInfo } from './interfaces/match-info.interface';
 import { PlayerInfo } from './interfaces/player-info.interface';
-import { countries, CountryInfo, CountrySlug } from './types';
+import { federations, FederationInfo, FederationSlug } from './types';
 import { TeamInfo } from './interfaces/team-info.interface';
 
 type RawMatch = {
@@ -21,15 +21,11 @@ type RawMatch = {
   matchDateTimeUtc: Date;
 };
 
-class DataprojectCountryClient implements OnApplicationBootstrap {
+class DataprojectFederationClient {
   constructor(
     private readonly httpService: HttpService,
-    public readonly country: CountryInfo,
+    public readonly federation: FederationInfo,
   ) {}
-
-  async onApplicationBootstrap() {
-    throw new Error('Method not implemented.');
-  }
 
   private connectionToken: string = null;
 
@@ -38,7 +34,18 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
     const uniqueTeamIds = new Set<number>();
 
     try {
-      for (const competitionId of this.country.competitionIds) {
+      // TODO рефакторинг
+      if (!this.federation.competitionIds.length) {
+        const competitionTeams = await this.getTeams();
+        for (const team of competitionTeams) {
+          if (!uniqueTeamIds.has(team.id)) {
+            uniqueTeamIds.add(team.id);
+            allTeams.push(team);
+          }
+        }
+      }
+
+      for (const competitionId of this.federation.competitionIds) {
         const competitionTeams = await this.getTeams(competitionId);
 
         for (const team of competitionTeams) {
@@ -50,7 +57,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
       }
     } catch (e) {
       Logger.error(
-        `Ошибка при получении всех команд для ${this.country.slug}:`,
+        `Ошибка при получении всех команд для ${this.federation.slug}:`,
         e,
       );
       throw e; // Можно заменить на return allTeams; если нужно продолжить при ошибках
@@ -60,20 +67,19 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
   }
 
   protected async getTeams(
-    competitionId: number,
+    competitionId?: number,
   ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
     //Logger.debug('getAllTeams');
-    const url = `https://${this.country.slug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
+    const url = `https://${this.federation.slug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
     type RawTeam = Pick<TeamInfo, 'id' | 'name'>;
     const teams: RawTeam[] = [];
 
     try {
-      const params = {
-        ID: competitionId,
-      };
+      let params = {};
+      if (competitionId) params['ID'] = competitionId;
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
-          Host: `${this.country.slug}-web.dataproject.com`,
+          Host: `${this.federation.slug}-web.dataproject.com`,
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
           Accept:
@@ -129,7 +135,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
           'Accept-Language': 'ru,ru-RU;q=0.9,en;q=0.8',
           Connection: 'keep-alive',
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          Origin: `https://${this.country.slug}-web.dataproject.com`,
+          Origin: `https://${this.federation.slug}-web.dataproject.com`,
           'Sec-Fetch-Dest': 'empty',
           'Sec-Fetch-Mode': 'cors',
           'Sec-Fetch-Site': 'cross-site',
@@ -155,7 +161,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
   protected async getRawMatchs(): Promise<RawMatch[]> {
     // Logger.debug('getRawMatchs');
 
-    const url = `https://${this.country.slug}-web.dataproject.com/MainLiveScore.aspx`;
+    const url = `https://${this.federation.slug}-web.dataproject.com/MainLiveScore.aspx`;
     const matches: RawMatch[] = [];
 
     try {
@@ -220,7 +226,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
     const requestData = {
       H: 'signalrlivehubfederations',
       M: 'getLiveScoreListData_From_ES',
-      A: [matchIds.join(';'), this.country.slug],
+      A: [matchIds.join(';'), this.federation.slug],
       I: 0,
     };
 
@@ -239,7 +245,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
         'Accept-Language': 'ru',
         Connection: 'keep-alive',
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: `https://${this.country.slug}-web.dataproject.com`,
+        Origin: `https://${this.federation.slug}-web.dataproject.com`,
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'cross-site',
@@ -325,7 +331,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
   ): Promise<PlayerInfo[]> {
     // Logger.debug('getTeamPlayersFromMatch');
 
-    const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.country.slug}"],"I":0}`;
+    const requestData = `data={"H":"signalrlivehubfederations","M":"getRosterData","A":["${matchId}",${teamId},"${this.federation.slug}"],"I":0}`;
 
     const connectionToken = await this.ensureConnectionToken();
 
@@ -346,7 +352,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
         Accept: 'text/plain, */*; q=0.01',
         'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: `https://${this.country.slug}-web.dataproject.com`,
+        Origin: `https://${this.federation.slug}-web.dataproject.com`,
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'cross-site',
@@ -372,9 +378,9 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
   protected async getTeamRoster(teamId: number) {
     // Logger.debug('getTeamRoster');
 
-    const url = `https://${this.country.slug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
+    const url = `https://${this.federation.slug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
     const headers = {
-      Host: `${this.country.slug}-web.dataproject.com`,
+      Host: `${this.federation.slug}-web.dataproject.com`,
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -438,7 +444,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
 
     const connectionToken = await this.ensureConnectionToken();
 
-    const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.country.slug}"],"I":0}`;
+    const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.federation.slug}"],"I":0}`;
 
     let config: AxiosRequestConfig = {
       method: 'post',
@@ -458,7 +464,7 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
         Accept: 'text/plain, */*; q=0.01',
         'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: `https://${this.country.slug}-web.dataproject.com`,
+        Origin: `https://${this.federation.slug}-web.dataproject.com`,
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'cross-site',
@@ -484,9 +490,9 @@ class DataprojectCountryClient implements OnApplicationBootstrap {
   }
 }
 
-export class DataprojectCountryCacheClient extends DataprojectCountryClient {
-  constructor(httpService: HttpService, country: CountryInfo) {
-    super(httpService, country);
+export class DataprojectFederationCacheClient extends DataprojectFederationClient {
+  constructor(httpService: HttpService, federation: FederationInfo) {
+    super(httpService, federation);
   }
 
   private readonly redis = new Redis({
@@ -510,14 +516,14 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
   }
 
   protected override getRawMatchs(): Promise<RawMatch[]> {
-    const key = `country:${this.country.slug}:matchIds`;
+    const key = `federation:${this.federation.slug}:matchIds`;
     return this.getOrSetCache(key, () => super.getRawMatchs());
     // return super.getRawMatchs();
   }
 
   public override async getMatchesInfo(): Promise<MatchInfo[]> {
     const matchIds = await this.getRawMatchs();
-    const key = `country:${this.country.slug}:matchesInfo:${matchIds.sort().join(',')}`;
+    const key = `federation:${this.federation.slug}:matchesInfo:${matchIds.sort().join(',')}`;
     return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds));
 
     // return super.getMatchesInfo(matchIds);
@@ -527,62 +533,64 @@ export class DataprojectCountryCacheClient extends DataprojectCountryClient {
     matchId: number,
     teamId: number,
   ): Promise<PlayerInfo[]> {
-    const key = `country:${this.country.slug}:playersFromMatch:${matchId}:${teamId}`;
+    const key = `federation:${this.federation.slug}:playersFromMatch:${matchId}:${teamId}`;
     return this.getOrSetCache(key, () =>
       super.getTeamPlayersFromMatch(matchId, teamId),
     );
   }
 
   public override getTeamRoster(teamId: number): Promise<PlayerInfo[]> {
-    const key = `country:${this.country.slug}:teamRoster:${teamId}`;
+    const key = `federation:${this.federation.slug}:teamRoster:${teamId}`;
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
   }
 
   public override getTeams(
     competitionId: number,
   ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    const key = `country:${this.country.slug}:teams`;
+    const key = `federation:${this.federation.slug}:teams`;
     return this.getOrSetCache(key, () => super.getTeams(competitionId));
     // return super.getAllTeams();
   }
 
   public override getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    const key = `country:${this.country.slug}:allTeams`;
+    const key = `federation:${this.federation.slug}:allTeams`;
     return this.getOrSetCache(key, () => super.getAllTeams());
   }
 }
 
 @Injectable()
 export class DataprojectApiService {
-  private clients: Map<string, DataprojectCountryCacheClient> = new Map();
+  private clients: Map<string, DataprojectFederationCacheClient> = new Map();
 
   constructor(private readonly httpService: HttpService) {}
 
-  getClient(country: CountryInfo): DataprojectCountryCacheClient;
-  getClient(countrySlug: CountrySlug): DataprojectCountryCacheClient;
+  getClient(federation: FederationInfo): DataprojectFederationCacheClient;
+  getClient(federationSlug: FederationSlug): DataprojectFederationCacheClient;
 
-  getClient(input: CountryInfo | CountrySlug): DataprojectCountryCacheClient {
-    const countrySlug = typeof input === 'string' ? input : input.slug;
-    let country: CountryInfo | undefined;
+  getClient(
+    input: FederationInfo | FederationSlug,
+  ): DataprojectFederationCacheClient {
+    const federationSlug = typeof input === 'string' ? input : input.slug;
+    let federation: FederationInfo | undefined;
 
     if (typeof input === 'string') {
-      country = countries.find((c) => c.slug === input);
-      if (!country) {
+      federation = federations.find((c) => c.slug === input);
+      if (!federation) {
         throw new BadRequestException(`Федерации ${input} не существует`);
       }
     } else {
-      country = input;
+      federation = input;
     }
 
-    if (!this.clients.has(countrySlug)) {
-      const client = new DataprojectCountryCacheClient(
+    if (!this.clients.has(federationSlug)) {
+      const client = new DataprojectFederationCacheClient(
         this.httpService,
-        country,
+        federation,
       );
-      this.clients.set(countrySlug, client);
+      this.clients.set(federationSlug, client);
       return client;
     }
 
-    return this.clients.get(countrySlug)!;
+    return this.clients.get(federationSlug)!;
   }
 }

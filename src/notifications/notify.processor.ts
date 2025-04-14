@@ -8,7 +8,7 @@ import {
 import { NOTIFY_QUEUE } from './notify.const';
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
 import { TeamInfo } from 'src/providers/dataproject/interfaces/team-info.interface';
-import { CountryInfo } from 'src/providers/dataproject/types';
+import { FederationInfo } from 'src/providers/dataproject/types';
 import { Logger } from '@nestjs/common';
 import * as moment from 'moment';
 
@@ -42,19 +42,19 @@ export class NotifyProcessor {
   }
 
   private formatNotification(event: NotificationEvent): string {
-    const { match, country } = event;
+    const { match, federation } = event;
     const { home, guest, competition } = match;
 
     const dateStr = this.formatMatchDateTime(event.matchDateTimeUtc);
     const teamEmoji = event.type === 'lineup' ? '📋' : '🔄';
     const title = event.type === 'lineup' ? 'ИЗМЕНЕНИЕ СОСТАВА' : 'ЗАМЕНА';
 
-    const matchLink = `https://${country.slug}-web.dataproject.com/LiveScore_adv.aspx?ID=${match.id}`;
+    const matchLink = `https://${federation.slug}-web.dataproject.com/LiveScore_adv.aspx?ID=${match.id}`;
 
     // Формируем заголовочный блок с одинарными переносами
     const headerLines = [
       `${teamEmoji} *${title}*`,
-      country ? `${country.emoji} ${country.name}` : '',
+      federation ? `${federation.emoji} ${federation.name}` : '',
       `🏆 ${competition || 'Неизвестный турнир'}`,
       `📅 ${dateStr}`,
     ]

@@ -7,7 +7,7 @@ export class MonitoredTeam extends Document {
   userId: number;
 
   @Prop({ required: true, type: String })
-  countrySlug: string;
+  federationSlug: string;
 
   @Prop({ required: true, type: Number })
   teamId: number;

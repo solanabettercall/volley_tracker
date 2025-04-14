@@ -2,7 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as TelegramBot from 'node-telegram-bot-api';
 import { appConfig } from 'src/config';
 import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api.service';
-import { countries, CountrySlug } from 'src/providers/dataproject/types';
+import { federations, FederationSlug } from 'src/providers/dataproject/types';
 
 import { MonitoredTeam } from '../schemas/monitoring.schema';
 import { MonitoringService } from 'src/monitoring/monitoring.service';
@@ -41,23 +41,23 @@ export class TelegramService implements OnApplicationBootstrap {
       const [action, ...payload] = data.split(':');
       const chatId = msg.chat.id;
       switch (action) {
-        case 'select_country_menu':
-          this.sendCountries(chatId);
+        case 'select_federation_menu':
+          this.sendFederations(chatId);
           break;
-        case 'select_country':
-          this.sendTeams(chatId, payload[0] as CountrySlug);
+        case 'select_federation':
+          this.sendTeams(chatId, payload[0] as FederationSlug);
           break;
         case 'select_team':
           this.sendPlayers(
             chatId,
-            payload[0] as CountrySlug,
+            payload[0] as FederationSlug,
             parseInt(payload[1]),
           );
           break;
         case 'toggle_player':
           this.togglePlayer(
             chatId,
-            payload[0] as CountrySlug,
+            payload[0] as FederationSlug,
             parseInt(payload[1]),
             parseInt(payload[2]),
             msg.message_id,
@@ -66,7 +66,7 @@ export class TelegramService implements OnApplicationBootstrap {
         case 'stop_monitoring':
           this.stopMonitoring(
             chatId,
-            payload[0] as CountrySlug,
+            payload[0] as FederationSlug,
             parseInt(payload[1]),
           );
           break;
@@ -74,10 +74,10 @@ export class TelegramService implements OnApplicationBootstrap {
           this.sendMainMenu(chatId);
           break;
         case 'back_to_countries':
-          this.sendCountries(chatId);
+          this.sendFederations(chatId);
           break;
         case 'back_to_teams':
-          this.sendTeams(chatId, payload[0] as CountrySlug);
+          this.sendTeams(chatId, payload[0] as FederationSlug);
           break;
         case 'view_monitoring':
           this.sendMonitoringStatus(chatId);
@@ -90,16 +90,21 @@ export class TelegramService implements OnApplicationBootstrap {
 
   private async togglePlayer(
     userId: number,
-    countrySlug: CountrySlug,
+    federationSlug: FederationSlug,
     teamId: number,
     playerId: number,
     messageId: number,
   ) {
-    Logger.debug('togglePlayer', { userId, countrySlug, teamId, playerId });
+    Logger.debug('togglePlayer', {
+      userId,
+      federationSlug,
+      teamId,
+      playerId,
+    });
 
     const monitoredTeam = await this.monitoringService.getPlayersForTeam(
       userId,
-      countrySlug,
+      federationSlug,
       teamId,
     );
     const alreadyMonitored = monitoredTeam.includes(playerId);
@@ -107,33 +112,33 @@ export class TelegramService implements OnApplicationBootstrap {
     if (alreadyMonitored) {
       await this.monitoringService.removePlayerFromMonitoring(
         userId,
-        countrySlug,
+        federationSlug,
         teamId,
         playerId,
       );
     } else {
       await this.monitoringService.addPlayerToMonitoring(
         userId,
-        countrySlug,
+        federationSlug,
         teamId,
         playerId,
       );
     }
 
     const players = await this.dataprojectApiService
-      .getClient(countrySlug)
+      .getClient(federationSlug)
       .getTeamRoster(teamId);
 
     const updatedPlayerIds = await this.monitoringService.getPlayersForTeam(
       userId,
-      countrySlug,
+      federationSlug,
       teamId,
     );
 
     const keyboard = players.map((player) => [
       {
         text: `${updatedPlayerIds.includes(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
-        callback_data: `toggle_player:${countrySlug}:${teamId}:${player.id}`,
+        callback_data: `toggle_player:${federationSlug}:${teamId}:${player.id}`,
       },
     ]);
 
@@ -141,13 +146,13 @@ export class TelegramService implements OnApplicationBootstrap {
       keyboard.push([
         {
           text: '🚫 Прекратить мониторинг команды',
-          callback_data: `stop_monitoring:${countrySlug}:${teamId}`,
+          callback_data: `stop_monitoring:${federationSlug}:${teamId}`,
         },
       ]);
     }
 
     keyboard.push([
-      { text: '⬅️ Назад', callback_data: `back_to_teams:${countrySlug}` },
+      { text: '⬅️ Назад', callback_data: `back_to_teams:${federationSlug}` },
       { text: '🏠 На главную', callback_data: 'back_to_main' },
     ]);
 
@@ -159,34 +164,34 @@ export class TelegramService implements OnApplicationBootstrap {
 
   private async stopMonitoring(
     chatId: number,
-    countrySlug: CountrySlug,
+    federationSlug: FederationSlug,
     teamId: number,
   ) {
     const monitoredPlayers = await this.monitoringService.getPlayersForTeam(
       chatId,
-      countrySlug,
+      federationSlug,
       teamId,
     );
 
     for (const playerId of monitoredPlayers) {
       await this.monitoringService.removePlayerFromMonitoring(
         chatId,
-        countrySlug,
+        federationSlug,
         teamId,
         playerId,
       );
     }
 
     const teams = await this.dataprojectApiService
-      .getClient(countrySlug)
+      .getClient(federationSlug)
       .getAllTeams();
 
     const team = teams.find((t) => t.id === teamId);
 
     if (team) {
-      const country = countries.find((c) => c.slug === countrySlug);
-      if (country) {
-        this.sendTeams(chatId, country.slug);
+      const federation = federations.find((c) => c.slug === federationSlug);
+      if (federation) {
+        this.sendTeams(chatId, federation.slug);
       }
     }
   }
@@ -197,7 +202,7 @@ export class TelegramService implements OnApplicationBootstrap {
         [
           {
             text: '🔍 Настроить мониторинг',
-            callback_data: 'select_country_menu',
+            callback_data: 'select_federation_menu',
           },
         ],
         [
@@ -215,19 +220,19 @@ export class TelegramService implements OnApplicationBootstrap {
     );
   }
 
-  private sendCountries(chatId: number) {
-    const keyboard = countries.reduce((acc, country, index) => {
+  private sendFederations(chatId: number) {
+    const keyboard = federations.reduce((acc, federation, index) => {
       if (index % 2 === 0) {
         acc.push([
           {
-            text: `${country.emoji} ${country.name}`,
-            callback_data: `select_country:${country.slug}`,
+            text: `${federation.emoji} ${federation.name}`,
+            callback_data: `select_federation:${federation.slug}`,
           },
         ]);
       } else {
         acc[acc.length - 1].push({
-          text: `${country.emoji} ${country.name}`,
-          callback_data: `select_country:${country.slug}`,
+          text: `${federation.emoji} ${federation.name}`,
+          callback_data: `select_federation:${federation.slug}`,
         });
       }
       return acc;
@@ -242,11 +247,11 @@ export class TelegramService implements OnApplicationBootstrap {
     });
   }
 
-  private async sendTeams(chatId: number, countrySlug: CountrySlug) {
-    const country = countries.find((c) => c.slug === countrySlug);
-    if (!country) return;
+  private async sendTeams(chatId: number, federationSlug: FederationSlug) {
+    const federation = federations.find((f) => f.slug === federationSlug);
+    if (!federation) return;
 
-    const client = this.dataprojectApiService.getClient(countrySlug);
+    const client = this.dataprojectApiService.getClient(federationSlug);
     const teamList = await client.getAllTeams();
     const matches = await client.getMatchesInfo();
     const matchTeams = matches.flatMap((m) => [m.guest, m.home]);
@@ -262,14 +267,14 @@ export class TelegramService implements OnApplicationBootstrap {
     const keyboard = uniqueTeams.map((team) => [
       {
         text: team.name,
-        callback_data: `select_team:${countrySlug}:${team.id}`,
+        callback_data: `select_team:${federationSlug}:${team.id}`,
       },
     ]);
     keyboard.push([{ text: '⬅️ Назад', callback_data: 'back_to_countries' }]);
 
     this.telegramBot.sendMessage(
       chatId,
-      `Страна: ${country.emoji} ${country.name}\nВыберите команду:`,
+      `Страна: ${federation.emoji} ${federation.name}\nВыберите команду:`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -280,15 +285,15 @@ export class TelegramService implements OnApplicationBootstrap {
 
   private async sendPlayers(
     chatId: number,
-    countrySlug: CountrySlug,
+    federationSlug: FederationSlug,
     teamId: number,
   ) {
     const players = await this.dataprojectApiService
-      .getClient(countrySlug)
+      .getClient(federationSlug)
       .getTeamRoster(teamId);
 
     const matches = await this.dataprojectApiService
-      .getClient(countrySlug as CountrySlug)
+      .getClient(federationSlug as FederationSlug)
       .getMatchesInfo();
 
     const liveTeam = matches
@@ -315,16 +320,16 @@ export class TelegramService implements OnApplicationBootstrap {
     }
 
     const teams = await this.dataprojectApiService
-      .getClient(countrySlug)
+      .getClient(federationSlug)
       .getAllTeams();
 
     const team = teams.find((t) => t.id === teamId);
-    const country = countries.find((c) => c.slug === countrySlug);
+    const federation = federations.find((c) => c.slug === federationSlug);
 
     const monitoredPlayerIds = new Set(
       await this.monitoringService.getPlayersForTeam(
         chatId,
-        countrySlug,
+        federationSlug,
         teamId,
       ),
     );
@@ -332,7 +337,7 @@ export class TelegramService implements OnApplicationBootstrap {
     const keyboard = allPlayers.map((player) => [
       {
         text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
-        callback_data: `toggle_player:${countrySlug}:${teamId}:${player.id}`,
+        callback_data: `toggle_player:${federationSlug}:${teamId}:${player.id}`,
       },
     ]);
 
@@ -340,19 +345,19 @@ export class TelegramService implements OnApplicationBootstrap {
       keyboard.push([
         {
           text: '🚫 Прекратить мониторинг команды',
-          callback_data: `stop_monitoring:${countrySlug}:${teamId}`,
+          callback_data: `stop_monitoring:${federationSlug}:${teamId}`,
         },
       ]);
     }
 
     keyboard.push([
-      { text: '⬅️ Назад', callback_data: `back_to_teams:${countrySlug}` },
+      { text: '⬅️ Назад', callback_data: `back_to_teams:${federationSlug}` },
       { text: '🏠 На главную', callback_data: 'back_to_main' },
     ]);
 
     this.telegramBot.sendMessage(
       chatId,
-      `Команда: ${team?.name ?? 'Неизвестно'}\nСтрана: ${country?.emoji ?? ''} ${country?.name ?? ''}\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
+      `Команда: ${team?.name ?? 'Неизвестно'}\nСтрана: ${federation?.emoji ?? ''} ${federation?.name ?? ''}\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -375,7 +380,7 @@ export class TelegramService implements OnApplicationBootstrap {
               [
                 {
                   text: '🔍 Настроить мониторинг',
-                  callback_data: 'select_country_menu',
+                  callback_data: 'select_federation_menu',
                 },
               ],
               [{ text: '🏠 На главную', callback_data: 'back_to_main' }],
@@ -388,27 +393,27 @@ export class TelegramService implements OnApplicationBootstrap {
 
     let message = '📊 Ваш текущий мониторинг:\n';
 
-    const countriesMap: {
+    const federationsMap: {
       [key: string]: {
-        countryName: string;
-        countryEmoji: string;
+        federationName: string;
+        federationEmoji: string;
         teams: string[];
       };
     } = {};
 
     for (const teamData of monitoredTeams) {
       const monitoredTeam = teamData as MonitoredTeam;
-      const { teamId, players, countrySlug } = monitoredTeam;
+      const { teamId, players, federationSlug } = monitoredTeam;
 
       // Пропускаем команды без игроков
       if (!players || players.length === 0) continue;
 
       const teamList = await this.dataprojectApiService
-        .getClient(countrySlug as CountrySlug)
+        .getClient(federationSlug as FederationSlug)
         .getAllTeams();
 
       const matches = await this.dataprojectApiService
-        .getClient(countrySlug as CountrySlug)
+        .getClient(federationSlug as FederationSlug)
         .getMatchesInfo();
 
       const liveTeams = matches.flatMap((m) => [m.guest, m.home]);
@@ -431,13 +436,13 @@ export class TelegramService implements OnApplicationBootstrap {
       const team = allTeams.find((t) => t.id === teamId);
       if (!team) continue;
 
-      const country = countries.find((c) => c.slug === countrySlug);
-      const countryEmoji = country ? country.emoji : '🌍';
+      const federation = federations.find((c) => c.slug === federationSlug);
+      const federationEmoji = federation ? federation.emoji : '🌍';
 
-      if (!countriesMap[countrySlug]) {
-        countriesMap[countrySlug] = {
-          countryName: country?.name || countrySlug,
-          countryEmoji,
+      if (!federationsMap[federationSlug]) {
+        federationsMap[federationSlug] = {
+          federationName: federation?.name || federationSlug,
+          federationEmoji: federationEmoji,
           teams: [],
         };
       }
@@ -445,14 +450,15 @@ export class TelegramService implements OnApplicationBootstrap {
       // Просто считаем длину массива отслеживаемых игроков
       const playerCount = players.length;
 
-      countriesMap[countrySlug].teams.push(
+      federationsMap[federationSlug].teams.push(
         `*${team.name}:* (${playerCount} игроков)`,
       );
     }
 
-    for (const countrySlug in countriesMap) {
-      const { countryName, countryEmoji, teams } = countriesMap[countrySlug];
-      message += `\n*${countryEmoji} ${countryName}:*\n`;
+    for (const federationSlug in federationsMap) {
+      const { federationName, federationEmoji, teams } =
+        federationsMap[federationSlug];
+      message += `\n*${federationEmoji} ${federationName}:*\n`;
       message += teams.join('\n') + '\n';
     }
 
@@ -460,7 +466,7 @@ export class TelegramService implements OnApplicationBootstrap {
       [
         {
           text: '✏️ Изменить мониторинг',
-          callback_data: 'select_country_menu',
+          callback_data: 'select_federation_menu',
         },
         { text: '🏠 На главную', callback_data: 'back_to_main' },
       ],
