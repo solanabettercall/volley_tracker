@@ -52,10 +52,10 @@ export class MonitoringProcessor {
 
   @Process('monitor-country')
   async handleCountry(job: Job<{ country: CountryInfo }>) {
-    const { slug, name } = job.data.country;
+    const { country } = job.data;
 
     try {
-      const client = this.dataprojectApiService.getClient(slug);
+      const client = this.dataprojectApiService.getClient(country);
       const matches = await client.getMatchesInfo();
 
       const now = moment.utc();
@@ -76,7 +76,7 @@ export class MonitoringProcessor {
       }
 
       const monitoredTeams =
-        await this.monitoringService.getAllMonitoredTeams(slug);
+        await this.monitoringService.getAllMonitoredTeams(country);
 
       for (const team of monitoredTeams) {
         for (const match of upcomingMatches) {
@@ -152,7 +152,7 @@ export class MonitoringProcessor {
         }
       }
     } catch (err) {
-      Logger.error(`Ошибка при обработке ${slug}: ${err.message}`);
+      Logger.error(`Ошибка при обработке ${country.slug}: ${err.message}`);
     }
   }
 }
