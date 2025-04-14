@@ -1,4 +1,4 @@
-export type CountrySlug =
+export type FederationSlug =
   | 'hos'
   | 'bevl'
   | 'hvf'
@@ -33,14 +33,14 @@ export type CountrySlug =
   | 'iva'
   | 'svbf';
 
-export interface CountryInfo {
-  slug: CountrySlug;
+export interface FederationInfo {
+  slug: FederationSlug;
   name: string;
   emoji: string;
   competitionIds: number[];
 }
 
-export const countries: CountryInfo[] = [
+export const federations: FederationInfo[] = [
   {
     slug: 'hos',
     name: 'Хорватия',

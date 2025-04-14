@@ -1,7 +1,10 @@
 import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CountryInfo, CountrySlug } from 'src/providers/dataproject/types';
+import {
+  FederationInfo,
+  FederationSlug,
+} from 'src/providers/dataproject/types';
 import { MonitoredTeam } from 'src/schemas/monitoring.schema';
 
 @Injectable()
@@ -16,12 +19,12 @@ export class MonitoringService implements OnApplicationBootstrap {
 
   async addPlayerToMonitoring(
     userId: number,
-    countrySlug: string,
+    federationSlug: string,
     teamId: number,
     playerId: number,
   ): Promise<void> {
     await this.monitoredTeamModel.findOneAndUpdate(
-      { userId, countrySlug, teamId },
+      { userId, federationSlug, teamId },
       { $addToSet: { players: playerId } },
       { upsert: true, new: true },
     );
@@ -29,42 +32,44 @@ export class MonitoringService implements OnApplicationBootstrap {
 
   async removePlayerFromMonitoring(
     userId: number,
-    countrySlug: string,
+    federationSlug: string,
     teamId: number,
     playerId: number,
   ): Promise<void> {
     await this.monitoredTeamModel.findOneAndUpdate(
-      { userId, countrySlug, teamId },
+      { userId, federationSlug, teamId },
       { $pull: { players: playerId } },
     );
   }
 
   async getMonitoredTeams(
     userId: number,
-    countrySlug?: string,
+    federationSlug?: string,
   ): Promise<MonitoredTeam[]> {
     const query: any = { userId };
-    if (countrySlug) {
-      query.countrySlug = countrySlug;
+    if (federationSlug) {
+      query.federationSlug = federationSlug;
     }
     return this.monitoredTeamModel.find(query).exec();
   }
 
-  async getAllMonitoredTeams(country: CountryInfo): Promise<MonitoredTeam[]> {
+  async getAllMonitoredTeams(
+    federation: FederationInfo,
+  ): Promise<MonitoredTeam[]> {
     const query: any = {};
-    if (country) {
-      query.countrySlug = country.slug;
+    if (federation) {
+      query.federationSlug = federation.slug;
     }
     return this.monitoredTeamModel.find(query).exec();
   }
 
   async getPlayersForTeam(
     userId: number,
-    countrySlug: CountrySlug,
+    federationSlug: FederationSlug,
     teamId: number,
   ): Promise<number[]> {
     const team = await this.monitoredTeamModel
-      .findOne({ userId, countrySlug, teamId })
+      .findOne({ userId, federationSlug, teamId })
       .exec();
     return team?.players ? [...team.players] : [];
   }
@@ -81,19 +86,19 @@ export class MonitoringService implements OnApplicationBootstrap {
 
   async removeTeamFromMonitoring(
     userId: number,
-    countrySlug: string,
+    federationSlug: string,
     teamId: number,
   ): Promise<void> {
     await this.monitoredTeamModel
-      .deleteOne({ userId, countrySlug, teamId })
+      .deleteOne({ userId, federationSlug, teamId })
       .exec();
   }
 
-  async removeCountryFromMonitoring(
+  async removeFederationFromMonitoring(
     userId: number,
-    countrySlug: string,
+    federationSlug: string,
   ): Promise<void> {
-    await this.monitoredTeamModel.deleteMany({ userId, countrySlug }).exec();
+    await this.monitoredTeamModel.deleteMany({ userId, federationSlug }).exec();
   }
 
   //   async getMonitoredTeams(userId: number): Promise<MonitoredTeam[]> {

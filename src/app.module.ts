@@ -20,7 +20,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
       },
     }),
     BullModule.registerQueue({
-      name: 'country-monitor',
+      name: 'federation-monitor',
     }),
     TelegramModule,
     MongooseModule.forRoot(
