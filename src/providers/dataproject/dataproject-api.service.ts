@@ -75,7 +75,7 @@ class DataprojectFederationClient {
     const teams: RawTeam[] = [];
     try {
       const params = competitionId ? { ID: competitionId } : {};
-      console.log(params);
+
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
           Host: `${this.federation.slug}-web.dataproject.com`,
@@ -299,7 +299,8 @@ class DataprojectFederationClient {
     const updatedMatches = await Promise.all(
       matches.map(async (match) => {
         const activePlayerIds = await this.getMatchActivePlayerIds(match.id);
-        if (!activePlayerIds.length) return match;
+
+        if (activePlayerIds.length !== 12) return match;
 
         const setIsActive = (players: PlayerInfo[]): PlayerInfo[] =>
           players.map((p) => ({
@@ -485,7 +486,7 @@ class DataprojectFederationClient {
       I: string;
     }>(config);
 
-    return data.R.map((R) => R.PID);
+    return data.R.map((R) => R.PID).filter((id) => id > 0);
   }
 }
 

@@ -2,14 +2,14 @@ import { Processor, Process, InjectQueue } from '@nestjs/bull';
 import { Job, Queue } from 'bull';
 import { DataprojectApiService } from '../providers/dataproject/dataproject-api.service';
 import { Logger } from '@nestjs/common';
-import { FederationInfo, FederationSlug } from '../providers/dataproject/types';
+import { FederationInfo } from '../providers/dataproject/types';
 import { MONITOR_QUEUE } from '../providers/dataproject/monitor.consts';
 import { MonitoringService } from './monitoring.service';
 import { NOTIFY_QUEUE } from 'src/notifications/notify.const';
 import { TeamInfo } from 'src/providers/dataproject/interfaces/team-info.interface';
 import { MatchInfo } from 'src/providers/dataproject/interfaces/match-info.interface';
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
-import { createHash, randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 import * as moment from 'moment';
 import { NotificationEvent } from 'src/notifications/notify.processor';
 
@@ -44,10 +44,21 @@ export class MonitoringProcessor {
     private readonly notifyQueue: Queue,
   ) {}
 
-  private hashEvent(event: NotificationEvent) {
-    const eventStr = JSON.stringify(event);
+  private hashEvent(event: NotificationEvent): string {
+    const normalized = {
+      missingPlayerIds: (event.missingPlayers ?? [])
+        .map((p) => p.id)
+        .sort((a, b) => a - b),
+      inactivePlayerIds: (event.inactivePlayers ?? [])
+        .map((p) => p.id)
+        .sort((a, b) => a - b),
+      matchId: event.match.id,
+      federationSlug: event.federation.slug,
+      userId: event.userId,
+    };
 
-    return createHash('sha256').update(eventStr).digest('hex').substring(0, 16); // Можно обрезать до нужной длины
+    const eventStr = JSON.stringify(normalized);
+    return createHash('sha256').update(eventStr).digest('hex').substring(0, 16);
   }
 
   @Process('monitor-federation')
