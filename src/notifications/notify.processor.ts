@@ -21,7 +21,10 @@ export class NotifyProcessor {
   private formatPlayersList(players: PlayerInfo[]): string {
     if (!players?.length) return '';
     return players
-      .map((p) => `⚪️ *№ ${p.number}* ${p.fullName.toUpperCase()}`)
+      .map(
+        (p) =>
+          `⚪️ *№ ${p.number}* ${p.fullName.toUpperCase()}${p.position ? ` _(${p.position})_` : ''}`,
+      )
       .join('\n');
   }
 
@@ -29,10 +32,16 @@ export class NotifyProcessor {
     const activePlayers = players.filter((p) => p.isActive);
     if (!activePlayers.length) return '';
 
-    return (
+    const result =
       `👥 *${teamName}:*\n` +
-      activePlayers.map((p) => `🟢 *№ ${p.number}* ${p.fullName}`).join('\n')
-    );
+      activePlayers
+        .map(
+          (p) =>
+            `🟢 *№ ${p.number}* ${p.fullName}${p.position ? ` _(${p.position})_` : ''}`,
+        )
+        .join('\n');
+
+    return result;
   }
 
   private formatMatchDateTime(date: string | Date): string {
