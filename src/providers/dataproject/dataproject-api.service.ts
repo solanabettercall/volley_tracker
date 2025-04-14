@@ -14,6 +14,7 @@ import { MatchInfo } from './interfaces/match-info.interface';
 import { PlayerInfo } from './interfaces/player-info.interface';
 import { federations, FederationInfo, FederationSlug } from './types';
 import { TeamInfo } from './interfaces/team-info.interface';
+import { PlayerPosition } from './enums';
 
 type RawMatch = {
   id: number;
@@ -203,7 +204,7 @@ class DataprojectFederationClient {
         }
       });
     } catch (e) {
-      console.error('Error fetching live matches:', e);
+      Logger.error('Error fetching live matches:', e);
     }
 
     return matches;
@@ -375,6 +376,30 @@ class DataprojectFederationClient {
     return players;
   }
 
+  private parsePlayerPosition(text: string): PlayerPosition | null {
+    if (!text) return null;
+    const textPosition = text.toLowerCase();
+    switch (textPosition) {
+      case 'libero':
+        return PlayerPosition.L;
+      case 'middle-blocker':
+        return PlayerPosition.МВ;
+      case 'opposite':
+        return PlayerPosition.О;
+      case 'setter':
+        return PlayerPosition.S;
+      case 'wing-spiker':
+        return PlayerPosition.WS;
+      case '-':
+        return null;
+
+      default: {
+        Logger.warn(`Неизвестная позиция: ${textPosition}`);
+        return null;
+      }
+    }
+  }
+
   protected async getTeamRoster(teamId: number) {
     // Logger.debug('getTeamRoster');
 
@@ -391,6 +416,7 @@ class DataprojectFederationClient {
       'Sec-Fetch-Site': 'same-origin',
       'Sec-Fetch-User': '?1',
       Priority: 'u=0, i',
+      Cookie: `CompetitionLangCode${this.federation.slug}=en-GB`,
     };
 
     try {
@@ -406,6 +432,10 @@ class DataprojectFederationClient {
         .find('div[id^="ctl00_Content_Main_PlayerListView_ctrl"][onclick]')
         .each((_, el) => {
           const element = $(el);
+          const cols = element.find('div.t-row div.t-col').eq(5);
+
+          const positionText = $(cols).text().trim();
+          const position = this.parsePlayerPosition(positionText);
 
           const onclickAttr = element.attr('onclick');
           const playerId = onclickAttr?.split('PlayerID=')[1]?.split('&ID')[0];
@@ -428,6 +458,7 @@ class DataprojectFederationClient {
               id: +playerId,
               number: +number,
               fullName: name,
+              position,
             });
           }
         });
@@ -542,6 +573,7 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   public override getTeamRoster(teamId: number): Promise<PlayerInfo[]> {
     const key = `federation:${this.federation.slug}:teamRoster:${teamId}`;
     return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
+    // return super.getTeamRoster(teamId);
   }
 
   public override getTeams(
