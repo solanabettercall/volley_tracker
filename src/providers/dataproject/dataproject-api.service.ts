@@ -73,10 +73,9 @@ class DataprojectFederationClient {
     const url = `https://${this.federation.slug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
     type RawTeam = Pick<TeamInfo, 'id' | 'name'>;
     const teams: RawTeam[] = [];
-
     try {
-      let params = {};
-      if (competitionId) params['ID'] = competitionId;
+      const params = competitionId ? { ID: competitionId } : {};
+      console.log(params);
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
           Host: `${this.federation.slug}-web.dataproject.com`,
@@ -547,14 +546,15 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   public override getTeams(
     competitionId: number,
   ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    const key = `federation:${this.federation.slug}:teams`;
+    const key = `federation:${this.federation.slug}:teams:${competitionId}`;
     return this.getOrSetCache(key, () => super.getTeams(competitionId));
-    // return super.getAllTeams();
+    // return super.getTeams(competitionId);
   }
 
   public override getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
     const key = `federation:${this.federation.slug}:allTeams`;
     return this.getOrSetCache(key, () => super.getAllTeams());
+    // return super.getAllTeams();
   }
 }
 
