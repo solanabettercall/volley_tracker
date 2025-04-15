@@ -13,8 +13,11 @@ export class MonitoringService implements OnApplicationBootstrap {
     @InjectModel('MonitoredTeam')
     private readonly monitoredTeamModel: Model<MonitoredTeam>,
   ) {}
-  async onApplicationBootstrap() {
-    // await this.monitoredTeamModel.deleteMany({ userId: 1635660561 });
+
+  async onApplicationBootstrap() {}
+
+  async clearMonitoring(chatId?: number) {
+    await this.monitoredTeamModel.deleteMany({ userId: chatId });
   }
 
   async addPlayerToMonitoring(

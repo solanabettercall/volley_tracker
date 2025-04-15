@@ -555,7 +555,7 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   public override async getMatchesInfo(): Promise<MatchInfo[]> {
     const matchIds = await this.getRawMatchs();
     const key = `federation:${this.federation.slug}:matchesInfo:${matchIds.sort().join(',')}`;
-    return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds));
+    return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds), 30);
 
     // return super.getMatchesInfo(matchIds);
   }
@@ -565,8 +565,10 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
     teamId: number,
   ): Promise<PlayerInfo[]> {
     const key = `federation:${this.federation.slug}:playersFromMatch:${matchId}:${teamId}`;
-    return this.getOrSetCache(key, () =>
-      super.getTeamPlayersFromMatch(matchId, teamId),
+    return this.getOrSetCache(
+      key,
+      () => super.getTeamPlayersFromMatch(matchId, teamId),
+      10,
     );
   }
 

@@ -32,6 +32,12 @@ export class TelegramService implements OnApplicationBootstrap {
       this.sendMainMenu(chatId);
     });
 
+    this.telegramBot.onText(/\/clear/, async (msg) => {
+      const chatId = msg.chat.id;
+      await this.monitoringService.clearMonitoring(chatId);
+      await this.sendMessage(chatId, 'Мониторинг успешно очищен');
+    });
+
     this.telegramBot.on('callback_query', async (callbackQuery) => {
       const msg = callbackQuery.message;
       const data = callbackQuery.data;
