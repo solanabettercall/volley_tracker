@@ -268,11 +268,15 @@ export class TelegramService implements OnApplicationBootstrap {
       uniqueTeamsMap.set(team.id, team);
     }
 
-    const uniqueTeams = Array.from(uniqueTeamsMap.values());
-
+    const uniqueTeams = Array.from(uniqueTeamsMap.values()).sort((a, b) => {
+      if (a.competition === b.competition) {
+        return a.name.localeCompare(b.name);
+      }
+      return a.competition.localeCompare(b.competition);
+    });
     const keyboard = uniqueTeams.map((team) => [
       {
-        text: team.name,
+        text: `${team.name} [${team.competition}]`,
         callback_data: `select_team:${federationSlug}:${team.id}`,
       },
     ]);
