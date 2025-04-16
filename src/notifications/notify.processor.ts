@@ -7,8 +7,6 @@ import {
 } from '../monitoring/monitoring.processor';
 import { NOTIFY_QUEUE } from './notify.const';
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
-import { TeamInfo } from 'src/providers/dataproject/interfaces/team-info.interface';
-import { FederationInfo } from 'src/providers/dataproject/types';
 import { Logger } from '@nestjs/common';
 import * as moment from 'moment';
 
@@ -95,6 +93,7 @@ export class NotifyProcessor {
     try {
       const event = job.data;
       const message = this.formatNotification(event);
+      Logger.debug(event);
       await this.telegramService.sendMessage(event.userId, message);
     } catch (error) {
       Logger.error('Error processing notification:', error);
