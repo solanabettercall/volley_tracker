@@ -12,6 +12,7 @@ import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.int
 import { createHash } from 'crypto';
 import * as moment from 'moment';
 import { NotificationEvent } from 'src/notifications/notify.processor';
+import * as stringify from 'json-stable-stringify';
 
 export interface LineupEvent {
   type: 'lineup';
@@ -57,8 +58,11 @@ export class MonitoringProcessor {
       userId: event.userId,
     };
 
-    const eventStr = JSON.stringify(normalized);
-    return createHash('sha256').update(eventStr).digest('hex').substring(0, 16);
+    const eventStr = stringify(normalized);
+
+    Logger.debug(eventStr);
+    const hash = createHash('md5').update(eventStr).digest('hex');
+    return hash;
   }
 
   @Process('monitor-federation')
@@ -78,7 +82,6 @@ export class MonitoringProcessor {
           moment.utc(match.matchDateTimeUtc).isAfter(now) &&
           moment.utc(match.matchDateTimeUtc).isSameOrBefore(oneHourLater),
       );
-      // const upcomingMatches = matches;
 
       if (upcomingMatches.length > 0) {
         Logger.debug(

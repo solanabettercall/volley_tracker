@@ -1,10 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  OnApplicationBootstrap,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as moment from 'moment';
 import * as cheerio from 'cheerio';
 import { AxiosRequestConfig } from 'axios';
@@ -389,6 +384,7 @@ class DataprojectFederationClient {
       case 'setter':
         return PlayerPosition.S;
       case 'wing-spiker':
+      case 'wing spiker':
         return PlayerPosition.WS;
       case '-':
         return null;
