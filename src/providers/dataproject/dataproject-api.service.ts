@@ -25,8 +25,10 @@ class DataprojectFederationClient {
 
   private connectionToken: string = null;
 
-  protected async getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    const allTeams: Pick<TeamInfo, 'id' | 'name'>[] = [];
+  protected async getAllTeams(): Promise<
+    Pick<TeamInfo, 'id' | 'name' | 'competition'>[]
+  > {
+    const allTeams: Pick<TeamInfo, 'id' | 'name' | 'competition'>[] = [];
     const uniqueTeamIds = new Set<number>();
 
     try {
@@ -64,10 +66,10 @@ class DataprojectFederationClient {
 
   protected async getTeams(
     competitionId?: number,
-  ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
+  ): Promise<Pick<TeamInfo, 'id' | 'name' | 'competition'>[]> {
     //Logger.debug('getAllTeams');
     const url = `https://${this.federation.slug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
-    type RawTeam = Pick<TeamInfo, 'id' | 'name'>;
+    type RawTeam = Pick<TeamInfo, 'id' | 'name' | 'competition'>;
     const teams: RawTeam[] = [];
     try {
       const params = competitionId ? { ID: competitionId } : {};
@@ -89,6 +91,10 @@ class DataprojectFederationClient {
         params,
       });
       const $ = cheerio.load(response.data);
+      const competition = $('div#LYR_Menu h2.CompetitionDescription_Header')
+        .text()
+        .trim();
+      console.log(this.federation.slug, `[${competition}]`);
       $('div.RadAjaxPanel div.rlvI[onclick]').each((_, element) => {
         const onclick = $(element).attr('onclick') ?? '';
         const teamName = $(element).find('h4').text().trim();
@@ -98,6 +104,7 @@ class DataprojectFederationClient {
         teams.push({
           id: teamId,
           name: teamName,
+          competition,
         });
       });
     } catch (e) {
@@ -276,6 +283,7 @@ class DataprojectFederationClient {
               r.ChampionshipMatchID,
               r.Home,
             ),
+            competition: competitionMap.get(id)?.competition,
           },
           guest: {
             id: r.Guest,
@@ -284,6 +292,7 @@ class DataprojectFederationClient {
               r.ChampionshipMatchID,
               r.Guest,
             ),
+            competition: competitionMap.get(id)?.competition,
           },
           competition: competitionMap.get(id)?.competition,
         };
@@ -576,16 +585,18 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
 
   public override getTeams(
     competitionId: number,
-  ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    const key = `federation:${this.federation.slug}:teams:${competitionId}`;
-    return this.getOrSetCache(key, () => super.getTeams(competitionId));
-    // return super.getTeams(competitionId);
+  ): Promise<Pick<TeamInfo, 'id' | 'name' | 'competition'>[]> {
+    // const key = `federation:${this.federation.slug}:teams:${competitionId}`;
+    // return this.getOrSetCache(key, () => super.getTeams(competitionId));
+    return super.getTeams(competitionId);
   }
 
-  public override getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
-    const key = `federation:${this.federation.slug}:allTeams`;
-    return this.getOrSetCache(key, () => super.getAllTeams());
-    // return super.getAllTeams();
+  public override getAllTeams(): Promise<
+    Pick<TeamInfo, 'id' | 'name' | 'competition'>[]
+  > {
+    // const key = `federation:${this.federation.slug}:allTeams`;
+    // return this.getOrSetCache(key, () => super.getAllTeams());
+    return super.getAllTeams();
   }
 }
 
