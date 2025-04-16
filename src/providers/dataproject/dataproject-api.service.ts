@@ -94,7 +94,7 @@ class DataprojectFederationClient {
       const competition = $('div#LYR_Menu h2.CompetitionDescription_Header')
         .text()
         .trim();
-      console.log(this.federation.slug, `[${competition}]`);
+
       $('div.RadAjaxPanel div.rlvI[onclick]').each((_, element) => {
         const onclick = $(element).attr('onclick') ?? '';
         const teamName = $(element).find('h4').text().trim();
