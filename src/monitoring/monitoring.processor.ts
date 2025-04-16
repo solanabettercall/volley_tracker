@@ -11,15 +11,19 @@ import { MatchInfo } from 'src/providers/dataproject/interfaces/match-info.inter
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
 import { createHash } from 'crypto';
 import * as moment from 'moment';
-import { NotificationEvent } from 'src/notifications/notify.processor';
 import * as stringify from 'json-stable-stringify';
+
+interface TeamEventData {
+  team: TeamInfo;
+  missingPlayers: PlayerInfo[];
+  inactivePlayers: PlayerInfo[];
+}
 
 export interface LineupEvent {
   type: 'lineup';
   userId: number;
-  team: TeamInfo;
-  missingPlayers: PlayerInfo[]; // игроки не заявлены вообще
-  inactivePlayers: PlayerInfo[]; // игроки заявлены, но не вышли на поле
+  home: TeamEventData;
+  guest: TeamEventData;
   match: MatchInfo;
   federation: FederationInfo;
   matchDateTimeUtc: Date;
@@ -28,9 +32,8 @@ export interface LineupEvent {
 export interface SubstitutionEvent {
   type: 'substitution';
   userId: number;
-  team: TeamInfo;
-  missingPlayers: PlayerInfo[]; // игроки не заявлены
-  inactivePlayers: PlayerInfo[]; // игроки на скамейке
+  home: TeamEventData;
+  guest: TeamEventData;
   match: MatchInfo;
   federation: FederationInfo;
   matchDateTimeUtc: Date;
@@ -45,22 +48,30 @@ export class MonitoringProcessor {
     private readonly notifyQueue: Queue,
   ) {}
 
-  private hashEvent(event: NotificationEvent): string {
+  private hashEvent(event: LineupEvent | SubstitutionEvent): string {
+    const normalizePlayers = (players: PlayerInfo[]) =>
+      players.map((p) => p.id).sort((a, b) => a - b);
+
     const normalized = {
-      missingPlayerIds: (event.missingPlayers ?? [])
-        .map((p) => p.id)
-        .sort((a, b) => a - b),
-      inactivePlayerIds: (event.inactivePlayers ?? [])
-        .map((p) => p.id)
-        .sort((a, b) => a - b),
+      home: {
+        missingPlayerIds: normalizePlayers(event.home.missingPlayers),
+        inactivePlayerIds: normalizePlayers(event.home.inactivePlayers),
+        teamId: event.home.team.id,
+      },
+      guest: {
+        missingPlayerIds: normalizePlayers(event.guest.missingPlayers),
+        inactivePlayerIds: normalizePlayers(event.guest.inactivePlayers),
+        teamId: event.guest.team.id,
+      },
       matchId: event.match.id,
       federationSlug: event.federation.slug,
       userId: event.userId,
+      eventType: event.type,
     };
 
     const eventStr = stringify(normalized);
+    Logger.debug(`Hashing event: ${eventStr}`);
 
-    Logger.debug(eventStr);
     const hash = createHash('md5').update(eventStr).digest('hex');
     return hash;
   }
@@ -92,75 +103,102 @@ export class MonitoringProcessor {
       const monitoredTeams =
         await this.monitoringService.getAllMonitoredTeams(federation);
 
-      for (const team of monitoredTeams) {
-        for (const match of upcomingMatches) {
-          const teamSide =
-            match.home.id === team.teamId
-              ? match.home
-              : match.guest.id === team.teamId
-                ? match.guest
-                : null;
-          if (!teamSide) continue;
+      for (const match of upcomingMatches) {
+        const homeTeamId = match.home.id;
+        const guestTeamId = match.guest.id;
 
-          const monitoredPlayerIds = new Set(team.players);
+        // Находим пользователей, которые отслеживают команды в этом матче
+        const usersMonitoringMatch = new Set<number>();
+        const homeTeamMonitors = monitoredTeams.filter(
+          (t) => t.teamId === homeTeamId,
+        );
+        const guestTeamMonitors = monitoredTeams.filter(
+          (t) => t.teamId === guestTeamId,
+        );
 
-          const playersInMatch = teamSide.players; // Игроки, заявленные на матч
-          const teamPlayers = await client.getTeamRoster(teamSide.id); // Игроки, заявленные на сезон
+        homeTeamMonitors.forEach((t) => usersMonitoringMatch.add(t.userId));
+        guestTeamMonitors.forEach((t) => usersMonitoringMatch.add(t.userId));
 
-          const playersInMatchMap = new Map(
-            playersInMatch.map((p) => [p.id, p]),
+        if (usersMonitoringMatch.size === 0) continue;
+
+        // Получаем составы команд
+        const [homeTeamPlayers, guestTeamPlayers] = await Promise.all([
+          client.getTeamRoster(homeTeamId),
+          client.getTeamRoster(guestTeamId),
+        ]);
+
+        // Подготавливаем данные по командам
+        const homeTeamData = {
+          team: match.home,
+          playersInMatch: match.home.players,
+          teamPlayers: homeTeamPlayers,
+        };
+
+        const guestTeamData = {
+          team: match.guest,
+          playersInMatch: match.guest.players,
+          teamPlayers: guestTeamPlayers,
+        };
+
+        // Обрабатываем каждого пользователя
+        for (const userId of usersMonitoringMatch) {
+          // Обрабатываем домашнюю команду
+          const homeResult = this.processTeamForUser(
+            homeTeamData,
+            monitoredTeams.filter(
+              (t) => t.userId === userId && t.teamId === homeTeamId,
+            ),
           );
-          const teamPlayersMap = new Map(teamPlayers.map((p) => [p.id, p]));
 
-          const missingPlayers: PlayerInfo[] = [];
-          const inactivePlayers: PlayerInfo[] = [];
+          // Обрабатываем гостевую команду
+          const guestResult = this.processTeamForUser(
+            guestTeamData,
+            monitoredTeams.filter(
+              (t) => t.userId === userId && t.teamId === guestTeamId,
+            ),
+          );
 
-          for (const id of monitoredPlayerIds) {
-            const playerInMatch = playersInMatchMap.get(id);
-            const playerInTeam = teamPlayersMap.get(id);
+          const commonEventFields = {
+            userId,
+            match,
+            federation,
+            matchDateTimeUtc: match.matchDateTimeUtc,
+            home: {
+              team: match.home,
+              ...homeResult,
+            },
+            guest: {
+              team: match.guest,
+              ...guestResult,
+            },
+          };
 
-            if (!playerInMatch && playerInTeam) {
-              missingPlayers.push(playerInTeam);
-            } else if (playerInMatch?.isActive === false) {
-              inactivePlayers.push(playerInMatch);
-            }
-          }
-
-          if (missingPlayers.length > 0) {
-            const event: LineupEvent = {
+          // Создаем события только если есть что сообщать
+          if (
+            homeResult.missingPlayers.length > 0 ||
+            guestResult.missingPlayers.length > 0
+          ) {
+            const lineupEvent: LineupEvent = {
               type: 'lineup',
-              userId: team.userId,
-              team: teamSide,
-              missingPlayers,
-              inactivePlayers,
-              match,
-              federation: job.data.federation,
-              matchDateTimeUtc: match.matchDateTimeUtc,
+              ...commonEventFields,
             };
-
-            const eventHash = this.hashEvent(event);
-
-            await this.notifyQueue.add('notify', event, {
-              jobId: eventHash,
+            const lineupHash = this.hashEvent(lineupEvent);
+            await this.notifyQueue.add('notify', lineupEvent, {
+              jobId: lineupHash,
             });
           }
 
-          if (inactivePlayers.length > 0) {
-            const event: SubstitutionEvent = {
+          if (
+            homeResult.inactivePlayers.length > 0 ||
+            guestResult.inactivePlayers.length > 0
+          ) {
+            const substitutionEvent: SubstitutionEvent = {
               type: 'substitution',
-              userId: team.userId,
-              team: teamSide,
-              missingPlayers,
-              inactivePlayers,
-              match,
-              federation: job.data.federation,
-              matchDateTimeUtc: match.matchDateTimeUtc,
+              ...commonEventFields,
             };
-
-            const eventHash = this.hashEvent(event);
-
-            await this.notifyQueue.add('notify', event, {
-              jobId: eventHash,
+            const substitutionHash = this.hashEvent(substitutionEvent);
+            await this.notifyQueue.add('notify', substitutionEvent, {
+              jobId: substitutionHash,
             });
           }
         }
@@ -168,5 +206,41 @@ export class MonitoringProcessor {
     } catch (err) {
       Logger.error(`Ошибка при обработке ${federation.slug}: ${err.message}`);
     }
+  }
+
+  private processTeamForUser(
+    teamData: {
+      team: TeamInfo;
+      playersInMatch: PlayerInfo[];
+      teamPlayers: PlayerInfo[];
+    },
+    userTeams: { players: number[] }[],
+  ): { missingPlayers: PlayerInfo[]; inactivePlayers: PlayerInfo[] } {
+    if (userTeams.length === 0) {
+      return { missingPlayers: [], inactivePlayers: [] };
+    }
+
+    const playersInMatchMap = new Map(
+      teamData.playersInMatch.map((p) => [p.id, p]),
+    );
+    const teamPlayersMap = new Map(teamData.teamPlayers.map((p) => [p.id, p]));
+
+    const monitoredPlayerIds = new Set(userTeams.flatMap((t) => t.players));
+
+    const missingPlayers: PlayerInfo[] = [];
+    const inactivePlayers: PlayerInfo[] = [];
+
+    for (const id of monitoredPlayerIds) {
+      const playerInMatch = playersInMatchMap.get(id);
+      const playerInTeam = teamPlayersMap.get(id);
+
+      if (!playerInMatch && playerInTeam) {
+        missingPlayers.push(playerInTeam);
+      } else if (playerInMatch?.isActive === false) {
+        inactivePlayers.push(playerInMatch);
+      }
+    }
+
+    return { missingPlayers, inactivePlayers };
   }
 }
