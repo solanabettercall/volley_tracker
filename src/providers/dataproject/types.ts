@@ -78,7 +78,7 @@ export const federations: FederationInfo[] = [
     competitionIds: [136, 137, 138, 139],
   },
   { slug: 'bli', name: 'Исландия', emoji: '🇮🇸', competitionIds: [112, 113] },
-  { slug: 'lml', name: 'Финляндия', emoji: '🇫🇮', competitionIds: [128, 131] },
+  { slug: 'lml', name: 'Финляндия', emoji: '🇫🇮', competitionIds: [128, 130] },
   {
     slug: 'lnv',
     name: 'Франция',
