@@ -20,7 +20,14 @@ export class MonitoringCronService implements OnApplicationBootstrap {
   @Cron(CronExpression.EVERY_10_SECONDS)
   async enqueueAllCountries() {
     for (const federation of federations) {
-      await this.monitorQueue.add('monitor-federation', { federation });
+      await this.monitorQueue.add(
+        'monitor-federation',
+        { federation },
+        {
+          jobId: federation.slug,
+          removeOnComplete: true,
+        },
+      );
     }
   }
 }

@@ -9,6 +9,7 @@ import { NOTIFY_QUEUE } from './notify.const';
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
 import { Logger } from '@nestjs/common';
 import * as moment from 'moment';
+import { PlayerStatistic } from 'src/providers/dataproject/dataproject-api.service';
 
 export type NotificationEvent = LineupEvent | SubstitutionEvent;
 
@@ -32,17 +33,22 @@ export class NotifyProcessor {
       })
       .map((p) => {
         let rating = null;
-        if (
-          p.statistic?.playedSetsCount &&
-          p.statistic?.totalPoints &&
-          p.statistic?.playedSetsCount > 0
-        ) {
-          rating = p.statistic?.totalPoints / p.statistic?.playedSetsCount;
-        }
-        return (
-          `   ${symbol} *№ ${p.number}* ${p.fullName.toUpperCase()}${p.position ? ` _(${p.position})_` : ''}` +
-          `${rating ? ` *[${rating.toFixed(2)}]*` : ''}`
-        );
+        let ratingString = null;
+        if (p)
+          if (
+            p.statistic?.playedSetsCount &&
+            p.statistic?.totalPoints &&
+            p.statistic?.playedSetsCount > 0
+          ) {
+            rating = p.statistic?.totalPoints / p.statistic?.playedSetsCount;
+            ratingString = `\n Рейтинг: ${rating.toFixed(2)} *(${p.statistic.totalPoints}/${p.statistic.playedSetsCount})*`;
+          }
+        // return (
+        //   `   ${symbol} *№ ${p.number}* ${p.fullName.toUpperCase()}${p.position ? ` _(${p.position})_` : ''}` +
+        //   `${rating ? ` *[${rating.toFixed(2)}]*` : ''}`
+        // );
+
+        return `- ${symbol} № ${p.number}: ${p.fullName.toUpperCase()}${ratingString ?? ''}`;
       })
       .join('\n');
   }
@@ -73,6 +79,16 @@ export class NotifyProcessor {
 
   private formatNotification(event: NotificationEvent): string {
     const { match, federation, matchDateTimeUtc, type, home, guest } = event;
+    console.log(home.inactivePlayers);
+    console.log(guest.inactivePlayers);
+    home.inactivePlayers = home.inactivePlayers.filter(
+      ({ statistic }) => new PlayerStatistic(statistic).rating > 2,
+    );
+    guest.inactivePlayers = guest.inactivePlayers.filter(
+      ({ statistic }) => new PlayerStatistic(statistic).rating > 2,
+    );
+    console.log(home.inactivePlayers);
+    console.log(guest.inactivePlayers);
 
     const competition = match.competition || 'Неизвестный турнир';
     const titleEmoji = type === 'lineup' ? '📋' : '🔄';
@@ -113,7 +129,7 @@ export class NotifyProcessor {
   async handleNotification(job: Job<NotificationEvent>) {
     try {
       const event = job.data;
-      console.log(JSON.stringify(event, null, 2));
+      // console.log(JSON.stringify(event, null, 2));
 
       const message = this.formatNotification(event);
 
