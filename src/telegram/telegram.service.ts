@@ -167,7 +167,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.sendMessage(
       chatId,
-      `Страна: ${federation.emoji} ${federation.name}\nВыберите лигу:`,
+      `${federation.emoji} ${federation.name}\nВыберите лигу:`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -372,7 +372,7 @@ export class TelegramService implements OnApplicationBootstrap {
     });
     const keyboard = uniqueTeams.map((team) => [
       {
-        text: `${team.name} [${team.competition}]`,
+        text: `${team.name}`,
         callback_data: `select_team:${federationSlug}:${competition}:${team.id}`,
       },
     ]);
@@ -385,7 +385,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.sendMessage(
       chatId,
-      `Страна: ${federation.emoji} ${federation.name}\nВыберите команду:`,
+      `${federation.emoji} ${federation.name}\n🏆 ${competition}\nВыберите команду:`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -472,7 +472,9 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.sendMessage(
       chatId,
-      `Команда: ${team?.name ?? 'Неизвестно'}\nСтрана: ${federation?.emoji ?? ''} ${federation?.name ?? ''}\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
+      // `Команда: ${team?.name ?? 'Неизвестно'}\nСтрана: ${federation?.emoji ?? ''} ${federation?.name ?? ''}\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
+
+      `${federation.emoji} ${federation.name}\n🏆 ${competition}\n👥 ${team.name}\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
