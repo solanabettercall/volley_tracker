@@ -18,6 +18,18 @@ export class NotifyProcessor {
 
   private formatPlayersList(players: PlayerInfo[], symbol: string): string {
     return players
+      .slice()
+      .sort((a, b) => {
+        const ratingA =
+          a.statistic?.playedSetsCount && a.statistic?.playedSetsCount > 0
+            ? a.statistic.totalPoints / a.statistic.playedSetsCount
+            : 0;
+        const ratingB =
+          b.statistic?.playedSetsCount && b.statistic?.playedSetsCount > 0
+            ? b.statistic.totalPoints / b.statistic.playedSetsCount
+            : 0;
+        return ratingB - ratingA;
+      })
       .map((p) => {
         let rating = null;
         if (
