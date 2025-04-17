@@ -73,6 +73,7 @@ export class MonitoringProcessor {
     Logger.debug(`Hashing event: ${eventStr}`);
 
     const hash = createHash('md5').update(eventStr).digest('hex');
+    Logger.verbose(hash);
     return hash;
   }
 
@@ -107,6 +108,18 @@ export class MonitoringProcessor {
         const homeTeamId = match.home.id;
         const guestTeamId = match.guest.id;
 
+        for (const player of match.home.players) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.home.id);
+        }
+
+        for (const player of match.guest.players) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.home.id);
+        }
+
         // Находим пользователей, которые отслеживают команды в этом матче
         const usersMonitoringMatch = new Set<number>();
         const homeTeamMonitors = monitoredTeams.filter(
@@ -126,6 +139,18 @@ export class MonitoringProcessor {
           client.getTeamRoster(homeTeamId),
           client.getTeamRoster(guestTeamId),
         ]);
+
+        for (const player of homeTeamPlayers) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.home.id);
+        }
+
+        for (const player of homeTeamPlayers) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.home.id);
+        }
 
         // Подготавливаем данные по командам
         const homeTeamData = {

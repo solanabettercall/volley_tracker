@@ -1,3 +1,4 @@
+import { PlayerStatistic } from '../dataproject-api.service';
 import { PlayerPosition } from '../enums';
 
 export interface PlayerInfo {
@@ -6,4 +7,5 @@ export interface PlayerInfo {
   fullName: string;
   isActive?: boolean;
   position?: PlayerPosition;
+  statistic?: PlayerStatistic | null;
 }

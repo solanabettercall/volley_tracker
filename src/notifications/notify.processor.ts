@@ -18,10 +18,20 @@ export class NotifyProcessor {
 
   private formatPlayersList(players: PlayerInfo[], symbol: string): string {
     return players
-      .map(
-        (p) =>
-          `   ${symbol} *№ ${p.number}* ${p.fullName.toUpperCase()}${p.position ? ` _(${p.position})_` : ''}`,
-      )
+      .map((p) => {
+        let rating = null;
+        if (
+          p.statistic?.playedSetsCount &&
+          p.statistic?.totalPoints &&
+          p.statistic?.playedSetsCount > 0
+        ) {
+          rating = p.statistic?.totalPoints / p.statistic?.playedSetsCount;
+        }
+        return (
+          `   ${symbol} *№ ${p.number}* ${p.fullName.toUpperCase()}${p.position ? ` _(${p.position})_` : ''}` +
+          `${rating ? ` *[${rating.toFixed(2)}]*` : ''}`
+        );
+      })
       .join('\n');
   }
 
@@ -51,6 +61,7 @@ export class NotifyProcessor {
 
   private formatNotification(event: NotificationEvent): string {
     const { match, federation, matchDateTimeUtc, type, home, guest } = event;
+
     const competition = match.competition || 'Неизвестный турнир';
     const titleEmoji = type === 'lineup' ? '📋' : '🔄';
     const titleText = type === 'lineup' ? 'ИЗМЕНЕНИЕ СОСТАВА' : 'ЗАМЕНА';
@@ -90,6 +101,8 @@ export class NotifyProcessor {
   async handleNotification(job: Job<NotificationEvent>) {
     try {
       const event = job.data;
+      console.log(JSON.stringify(event, null, 2));
+
       const message = this.formatNotification(event);
 
       await this.telegramService.sendMessage(event.userId, message);
