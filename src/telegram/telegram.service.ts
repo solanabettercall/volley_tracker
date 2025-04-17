@@ -51,21 +51,29 @@ export class TelegramService implements OnApplicationBootstrap {
           this.sendFederations(chatId);
           break;
         case 'select_federation':
-          this.sendTeams(chatId, payload[0] as FederationSlug);
+          // this.sendTeams(chatId, payload[0] as FederationSlug);
+          this.sendCompetitions(chatId, payload[0] as FederationSlug);
           break;
+        case 'select_competition':
+          this.sendTeams(chatId, payload[0] as FederationSlug, payload[1]);
+
+          break;
+
         case 'select_team':
           this.sendPlayers(
             chatId,
             payload[0] as FederationSlug,
-            parseInt(payload[1]),
+            payload[1],
+            parseInt(payload[2]),
           );
           break;
         case 'toggle_player':
           this.togglePlayer(
             chatId,
             payload[0] as FederationSlug,
-            parseInt(payload[1]),
+            payload[1],
             parseInt(payload[2]),
+            parseInt(payload[3]),
             msg.message_id,
           );
           break;
@@ -73,7 +81,8 @@ export class TelegramService implements OnApplicationBootstrap {
           this.stopMonitoring(
             chatId,
             payload[0] as FederationSlug,
-            parseInt(payload[1]),
+            payload[1],
+            parseInt(payload[2]),
           );
           break;
         case 'back_to_main':
@@ -82,8 +91,11 @@ export class TelegramService implements OnApplicationBootstrap {
         case 'back_to_countries':
           this.sendFederations(chatId);
           break;
+        case 'back_to_competitions':
+          this.sendCompetitions(chatId, payload[0] as FederationSlug);
+          break;
         case 'back_to_teams':
-          this.sendTeams(chatId, payload[0] as FederationSlug);
+          this.sendTeams(chatId, payload[0] as FederationSlug, payload[1]);
           break;
         case 'view_monitoring':
           this.sendMonitoringStatus(chatId);
@@ -94,9 +106,80 @@ export class TelegramService implements OnApplicationBootstrap {
     });
   }
 
+  async sendCompetitions(chatId: number, federationSlug: FederationSlug) {
+    const federation = federations.find((f) => f.slug === federationSlug);
+    if (!federation) return;
+
+    const client = this.dataprojectApiService.getClient(federationSlug);
+    const teams = await client.getAllTeams();
+    const competitions: Set<string> = new Set<string>(
+      teams.map((t) => t.competition),
+    );
+
+    // const matches = await client.getMatchesInfo();
+    // const matchTeams = matches.flatMap((m) => [m.guest, m.home]);
+    // const allTeams = [...teamList, ...matchTeams];
+    // const uniqueTeamsMap = new Map<number, (typeof allTeams)[number]>();
+
+    // for (const team of allTeams) {
+    //   uniqueTeamsMap.set(team.id, team);
+    // }
+
+    // const uniqueTeams = Array.from(uniqueTeamsMap.values()).sort((a, b) => {
+    //   if (a.competition === b.competition) {
+    //     return a.name.localeCompare(b.name);
+    //   }
+    //   return a.competition.localeCompare(b.competition);
+    // });
+    // const keyboard = competitions.map((competition) => [
+    //   {
+    //     text: competition,
+    //     callback_data: `select_competition:${federationSlug}:${competition}`,
+    //   },
+    // ]);
+
+    const keyboard = Array.from(competitions).reduce(
+      (acc, competition, index) => {
+        if (index % 2 === 0) {
+          acc.push([
+            {
+              text: competition,
+              callback_data: `select_competition:${federationSlug}:${competition}`,
+            },
+          ]);
+        } else {
+          acc[acc.length - 1].push({
+            text: competition,
+            callback_data: `select_competition:${federationSlug}:${competition}`,
+          });
+        }
+        return acc;
+      },
+      [] as TelegramBot.InlineKeyboardButton[][],
+    );
+
+    keyboard.push([
+      {
+        text: '⬅️ Назад',
+        callback_data: `back_to_countries`,
+      },
+    ]);
+
+    this.telegramBot.sendMessage(
+      chatId,
+      `Страна: ${federation.emoji} ${federation.name}\nВыберите лигу:`,
+      {
+        reply_markup: {
+          inline_keyboard: keyboard,
+        },
+      },
+    );
+  }
+
   private async togglePlayer(
     userId: number,
     federationSlug: FederationSlug,
+    competition: string,
     teamId: number,
     playerId: number,
     messageId: number,
@@ -144,7 +227,7 @@ export class TelegramService implements OnApplicationBootstrap {
     const keyboard = players.map((player) => [
       {
         text: `${updatedPlayerIds.includes(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
-        callback_data: `toggle_player:${federationSlug}:${teamId}:${player.id}`,
+        callback_data: `toggle_player:${federationSlug}:${competition}:${teamId}:${player.id}`,
       },
     ]);
 
@@ -158,7 +241,10 @@ export class TelegramService implements OnApplicationBootstrap {
     }
 
     keyboard.push([
-      { text: '⬅️ Назад', callback_data: `back_to_teams:${federationSlug}` },
+      {
+        text: '⬅️ Назад',
+        callback_data: `back_to_teams:${federationSlug}:${competition}`,
+      },
       { text: '🏠 На главную', callback_data: 'back_to_main' },
     ]);
 
@@ -171,6 +257,7 @@ export class TelegramService implements OnApplicationBootstrap {
   private async stopMonitoring(
     chatId: number,
     federationSlug: FederationSlug,
+    competition: string,
     teamId: number,
   ) {
     const monitoredPlayers = await this.monitoringService.getPlayersForTeam(
@@ -197,7 +284,7 @@ export class TelegramService implements OnApplicationBootstrap {
     if (team) {
       const federation = federations.find((c) => c.slug === federationSlug);
       if (federation) {
-        this.sendTeams(chatId, federation.slug);
+        await this.sendTeams(chatId, federation.slug, competition);
       }
     }
   }
@@ -253,15 +340,24 @@ export class TelegramService implements OnApplicationBootstrap {
     });
   }
 
-  private async sendTeams(chatId: number, federationSlug: FederationSlug) {
+  private async sendTeams(
+    chatId: number,
+    federationSlug: FederationSlug,
+    competition: string,
+  ) {
     const federation = federations.find((f) => f.slug === federationSlug);
     if (!federation) return;
 
     const client = this.dataprojectApiService.getClient(federationSlug);
     const teamList = await client.getAllTeams();
+    const filteredTeams = teamList.filter((t) => t.competition === competition);
+
     const matches = await client.getMatchesInfo();
-    const matchTeams = matches.flatMap((m) => [m.guest, m.home]);
-    const allTeams = [...teamList, ...matchTeams];
+    const filteredMatches = matches.filter(
+      (m) => m.competition === competition,
+    );
+    const matchTeams = filteredMatches.flatMap((m) => [m.guest, m.home]);
+    const allTeams = [...filteredTeams, ...matchTeams];
     const uniqueTeamsMap = new Map<number, (typeof allTeams)[number]>();
 
     for (const team of allTeams) {
@@ -277,10 +373,15 @@ export class TelegramService implements OnApplicationBootstrap {
     const keyboard = uniqueTeams.map((team) => [
       {
         text: `${team.name} [${team.competition}]`,
-        callback_data: `select_team:${federationSlug}:${team.id}`,
+        callback_data: `select_team:${federationSlug}:${competition}:${team.id}`,
       },
     ]);
-    keyboard.push([{ text: '⬅️ Назад', callback_data: 'back_to_countries' }]);
+    keyboard.push([
+      {
+        text: '⬅️ Назад',
+        callback_data: `back_to_competitions:${federationSlug}`,
+      },
+    ]);
 
     this.telegramBot.sendMessage(
       chatId,
@@ -296,6 +397,7 @@ export class TelegramService implements OnApplicationBootstrap {
   private async sendPlayers(
     chatId: number,
     federationSlug: FederationSlug,
+    competition: string,
     teamId: number,
   ) {
     const players = await this.dataprojectApiService
@@ -347,7 +449,7 @@ export class TelegramService implements OnApplicationBootstrap {
     const keyboard = allPlayers.map((player) => [
       {
         text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
-        callback_data: `toggle_player:${federationSlug}:${teamId}:${player.id}`,
+        callback_data: `toggle_player:${federationSlug}:${competition}:${teamId}:${player.id}`,
       },
     ]);
 
@@ -361,7 +463,10 @@ export class TelegramService implements OnApplicationBootstrap {
     }
 
     keyboard.push([
-      { text: '⬅️ Назад', callback_data: `back_to_teams:${federationSlug}` },
+      {
+        text: '⬅️ Назад',
+        callback_data: `back_to_teams:${federationSlug}:${competition}`,
+      },
       { text: '🏠 На главную', callback_data: 'back_to_main' },
     ]);
 
