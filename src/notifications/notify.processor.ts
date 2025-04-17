@@ -33,22 +33,23 @@ export class NotifyProcessor {
       })
       .map((p) => {
         let rating = null;
-        let ratingString = null;
-        if (p)
-          if (
-            p.statistic?.playedSetsCount &&
-            p.statistic?.totalPoints &&
-            p.statistic?.playedSetsCount > 0
-          ) {
-            rating = p.statistic?.totalPoints / p.statistic?.playedSetsCount;
-            ratingString = `\n Рейтинг: ${rating.toFixed(2)} *(${p.statistic.totalPoints}/${p.statistic.playedSetsCount})*`;
-          }
-        // return (
-        //   `   ${symbol} *№ ${p.number}* ${p.fullName.toUpperCase()}${p.position ? ` _(${p.position})_` : ''}` +
-        //   `${rating ? ` *[${rating.toFixed(2)}]*` : ''}`
-        // );
+        let ratingString = '';
+        let positionString = '';
 
-        return `- ${symbol} № ${p.number}: ${p.fullName.toUpperCase()}${ratingString ?? ''}`;
+        if (
+          p.statistic?.playedSetsCount &&
+          p.statistic?.totalPoints &&
+          p.statistic?.playedSetsCount > 0
+        ) {
+          rating = p.statistic?.totalPoints / p.statistic?.playedSetsCount;
+          ratingString = `\n Рейтинг: ${rating.toFixed(2)} *(${p.statistic.totalPoints}/${p.statistic.playedSetsCount})*`;
+        }
+
+        if (p.position) {
+          positionString = ` _(${p.position})_`;
+        }
+
+        return `- ${symbol} № ${p.number}: ${p.fullName.toUpperCase()}${positionString}${ratingString}`;
       })
       .join('\n');
   }
