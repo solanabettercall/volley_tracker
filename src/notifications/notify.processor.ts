@@ -80,16 +80,6 @@ export class NotifyProcessor {
 
   private formatNotification(event: NotificationEvent): string {
     const { match, federation, matchDateTimeUtc, type, home, guest } = event;
-    console.log(home.inactivePlayers);
-    console.log(guest.inactivePlayers);
-    home.inactivePlayers = home.inactivePlayers.filter(
-      ({ statistic }) => new PlayerStatistic(statistic).rating > 2,
-    );
-    guest.inactivePlayers = guest.inactivePlayers.filter(
-      ({ statistic }) => new PlayerStatistic(statistic).rating > 2,
-    );
-    console.log(home.inactivePlayers);
-    console.log(guest.inactivePlayers);
 
     const competition = match.competition || 'Неизвестный турнир';
     const titleEmoji = type === 'lineup' ? '📋' : '🔄';
@@ -130,7 +120,11 @@ export class NotifyProcessor {
   async handleNotification(job: Job<NotificationEvent>) {
     try {
       const event = job.data;
-      // console.log(JSON.stringify(event, null, 2));
+
+      Logger.verbose('event', event);
+      Logger.verbose('eventHash', job.id);
+
+      Logger.verbose(JSON.stringify(event, null, 2));
 
       const message = this.formatNotification(event);
 

@@ -70,10 +70,9 @@ export class MonitoringProcessor {
     };
 
     const eventStr = stringify(normalized);
-    Logger.debug(`Hashing event: ${eventStr}`);
 
     const hash = createHash('md5').update(eventStr).digest('hex');
-    Logger.verbose(hash);
+
     return hash;
   }
 
@@ -208,8 +207,11 @@ export class MonitoringProcessor {
               ...commonEventFields,
             };
             const lineupHash = this.hashEvent(lineupEvent);
+
             await this.notifyQueue.add('notify', lineupEvent, {
               jobId: lineupHash,
+              removeOnComplete: false,
+              removeOnFail: true,
             });
           }
 
@@ -222,8 +224,11 @@ export class MonitoringProcessor {
               ...commonEventFields,
             };
             const substitutionHash = this.hashEvent(substitutionEvent);
+
             await this.notifyQueue.add('notify', substitutionEvent, {
               jobId: substitutionHash,
+              removeOnComplete: false,
+              removeOnFail: true,
             });
           }
         }
