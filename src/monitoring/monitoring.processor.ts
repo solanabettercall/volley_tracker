@@ -70,9 +70,9 @@ export class MonitoringProcessor {
     };
 
     const eventStr = stringify(normalized);
-    Logger.debug(`Hashing event: ${eventStr}`);
 
     const hash = createHash('md5').update(eventStr).digest('hex');
+
     return hash;
   }
 
@@ -84,13 +84,13 @@ export class MonitoringProcessor {
       const client = this.dataprojectApiService.getClient(federation);
       const matches = await client.getMatchesInfo();
 
-      const now = moment.utc();
+      const oneHourBefore = moment.utc().subtract(1, 'hour');
       const oneHourLater = moment.utc().add(1, 'hour');
 
       const upcomingMatches = matches.filter(
         (match) =>
           match.matchDateTimeUtc &&
-          moment.utc(match.matchDateTimeUtc).isAfter(now) &&
+          moment.utc(match.matchDateTimeUtc).isAfter(oneHourBefore) &&
           moment.utc(match.matchDateTimeUtc).isSameOrBefore(oneHourLater),
       );
 
@@ -104,8 +104,21 @@ export class MonitoringProcessor {
         await this.monitoringService.getAllMonitoredTeams(federation);
 
       for (const match of upcomingMatches) {
+        // Logger.debug(match);
         const homeTeamId = match.home.id;
         const guestTeamId = match.guest.id;
+
+        for (const player of match.home.players) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.home.id);
+        }
+
+        for (const player of match.guest.players) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.home.id);
+        }
 
         // Находим пользователей, которые отслеживают команды в этом матче
         const usersMonitoringMatch = new Set<number>();
@@ -127,6 +140,22 @@ export class MonitoringProcessor {
           client.getTeamRoster(guestTeamId),
         ]);
 
+        for (const player of homeTeamPlayers) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.home.id);
+        }
+
+        for (const player of guestTeamPlayers) {
+          player.statistic = await this.dataprojectApiService
+            .getClient(federation)
+            .getPlayerStatistic(player.id, match.guest.id);
+        }
+
+        // Logger.verbose(homeTeamPlayers, 'homeTeamPlayers');
+        // Logger.verbose(homeTeamPlayers, 'guestTeamPlayers');
+        // Logger.debug(match.home.players, 'match.home.players');
+        // Logger.debug(match.guest.players, 'match.guest.players');
         // Подготавливаем данные по командам
         const homeTeamData = {
           team: match.home,
@@ -158,6 +187,9 @@ export class MonitoringProcessor {
             ),
           );
 
+          // Logger.verbose(homeResult, 'homeResult');
+          // Logger.verbose(guestResult, 'guestResult');
+
           const commonEventFields = {
             userId,
             match,
@@ -183,8 +215,11 @@ export class MonitoringProcessor {
               ...commonEventFields,
             };
             const lineupHash = this.hashEvent(lineupEvent);
+
             await this.notifyQueue.add('notify', lineupEvent, {
               jobId: lineupHash,
+              removeOnComplete: false,
+              removeOnFail: true,
             });
           }
 
@@ -197,8 +232,11 @@ export class MonitoringProcessor {
               ...commonEventFields,
             };
             const substitutionHash = this.hashEvent(substitutionEvent);
+
             await this.notifyQueue.add('notify', substitutionEvent, {
               jobId: substitutionHash,
+              removeOnComplete: false,
+              removeOnFail: true,
             });
           }
         }

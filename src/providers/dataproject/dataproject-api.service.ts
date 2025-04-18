@@ -13,9 +13,35 @@ import { PlayerPosition } from './enums';
 
 type RawMatch = {
   id: number;
-  competition: string;
+  competitionName: string;
   matchDateTimeUtc: Date;
 };
+
+interface IPlayerStatistic {
+  id: number;
+  totalPoints: number;
+  playedSetsCount: number;
+  teamId: number;
+  competitionId: number;
+}
+
+export class PlayerStatistic implements IPlayerStatistic {
+  constructor(dto: IPlayerStatistic) {
+    Object.assign(this, dto);
+  }
+
+  id: number;
+  totalPoints: number;
+  playedSetsCount: number;
+  teamId: number;
+  competitionId: number;
+
+  get rating(): number {
+    return this.playedSetsCount > 0
+      ? this.totalPoints / this.playedSetsCount
+      : 0;
+  }
+}
 
 class DataprojectFederationClient {
   constructor(
@@ -24,6 +50,132 @@ class DataprojectFederationClient {
   ) {}
 
   private connectionToken: string = null;
+
+  protected async getPlayersStatistic(): Promise<PlayerStatistic[]> {
+    const allStats: PlayerStatistic[] = [];
+
+    // Генератор для обхода всех competitionId
+    async function* statsGenerator(this: DataprojectFederationClient) {
+      const competitionIds = this.federation.competitionIds;
+
+      if (!competitionIds?.length) return;
+
+      for (const competitionId of competitionIds) {
+        try {
+          const stats =
+            await this.getPlayersStatisticByCompetition(competitionId);
+          for (const stat of stats) {
+            yield stat;
+          }
+        } catch (e) {
+          Logger.warn(
+            `Ошибка при получении статистики по competitionId=${competitionId}`,
+            e,
+          );
+        }
+      }
+    }
+
+    for await (const stat of statsGenerator.call(this)) {
+      allStats.push(stat);
+    }
+
+    return allStats;
+  }
+
+  protected async getPlayersCount(competitionId: number): Promise<number> {
+    const payload = {
+      filterExpressions: [],
+      compID: competitionId,
+      phaseID: 0,
+      playerSearchByName: '',
+    };
+
+    const config = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: `https://${this.federation.slug}-web.dataproject.com/Statistics_AllPlayers.aspx/GetCount`,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+        Accept: '*/*',
+        'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json; charset=utf-8',
+        Origin: `https://${this.federation.slug}-web.dataproject.com`,
+        DNT: '1',
+        'Sec-GPC': '1',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+      },
+      data: payload,
+    };
+
+    const { data } = await this.httpService.axiosRef.request(config);
+
+    const count = data?.d ?? 0;
+    return count;
+  }
+
+  protected async getPlayersStatisticByCompetition(
+    competitionId: number,
+  ): Promise<PlayerStatistic[]> {
+    const maximumRows = await this.getPlayersCount(competitionId);
+
+    const payload = {
+      startIndex: 0,
+      maximumRows: maximumRows,
+      sortExpressions: '',
+      filterExpressions: [],
+      compID: competitionId,
+      phaseID: 0,
+      playerSearchByName: '',
+    };
+    let config = {
+      method: 'post',
+      url: `https://${this.federation.slug}-web.dataproject.com/Statistics_AllPlayers.aspx/GetData`,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+        Accept: '*/*',
+        'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json; charset=utf-8',
+        Origin: `https://${this.federation.slug}-web.dataproject.com`,
+        DNT: '1',
+        'Sec-GPC': '1',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+      },
+      data: payload,
+    };
+
+    type RawPartialPlayerStatistic = {
+      PlayerID: number;
+      PointsTot_ForAllPlayerStats: number;
+      PlayedSets: number;
+      TeamID: number;
+    };
+    const { data } = await this.httpService.axiosRef.request<{
+      d: RawPartialPlayerStatistic[];
+    }>(config);
+
+    if (!data?.d) {
+      return [];
+    }
+    return data.d.map(
+      (d) =>
+        new PlayerStatistic({
+          id: d.PlayerID,
+          competitionId: competitionId,
+          playedSetsCount: d.PlayedSets,
+          totalPoints: d.PointsTot_ForAllPlayerStats,
+          teamId: d.TeamID,
+        }),
+    );
+  }
 
   protected async getAllTeams(): Promise<
     Pick<TeamInfo, 'id' | 'name' | 'competition'>[]
@@ -202,7 +354,11 @@ class DataprojectFederationClient {
         const matchId = $(element).attr('id')?.split('Match_Main_')[1]?.trim();
 
         if (matchId && competition) {
-          matches.push({ id: +matchId, competition, matchDateTimeUtc });
+          matches.push({
+            id: +matchId,
+            competitionName: competition,
+            matchDateTimeUtc,
+          });
         }
       });
     } catch (e) {
@@ -220,7 +376,10 @@ class DataprojectFederationClient {
     const competitionMap = new Map(
       rawMatches.map((m) => [
         m.id,
-        { competition: m.competition, matchDateTimeUtc: m.matchDateTimeUtc },
+        {
+          competition: m.competitionName,
+          matchDateTimeUtc: m.matchDateTimeUtc,
+        },
       ]),
     );
 
@@ -370,12 +529,17 @@ class DataprojectFederationClient {
       I: string;
     }>(config);
 
+    const teamRoster: PlayerInfo[] = await this.getTeamRoster(teamId);
+
     const players: PlayerInfo[] = data.R.map((r) => {
-      return {
+      const basePlayer = {
         id: r.PID,
         number: r.N,
         fullName: `${r.SR} ${r.NM}`,
       };
+
+      const extraInfo = teamRoster.find((p) => p.id === r.PID);
+      return Object.assign(basePlayer, extraInfo);
     });
     return players;
   }
@@ -387,6 +551,7 @@ class DataprojectFederationClient {
       case 'libero':
         return PlayerPosition.L;
       case 'middle-blocker':
+      case 'middle blocker':
         return PlayerPosition.МВ;
       case 'opposite':
         return PlayerPosition.О;
@@ -522,7 +687,32 @@ class DataprojectFederationClient {
       I: string;
     }>(config);
 
-    return data.R.map((R) => R.PID).filter((id) => id > 0);
+    return data.R.map((R) => R.PID);
+  }
+
+  protected async getPlayerStatistic(
+    playerId: number,
+    teamId: number,
+  ): Promise<PlayerStatistic | null> {
+    const allStats = await this.getPlayersStatistic();
+
+    let matchingStats = allStats.filter(
+      (stat) => stat.id === playerId && stat.teamId === teamId,
+    );
+
+    if (matchingStats.length === 0) {
+      matchingStats = allStats.filter((stat) => stat.id === playerId);
+    }
+
+    if (matchingStats.length === 0) {
+      return null;
+    }
+
+    const bestStat = matchingStats.reduce((prev, current) =>
+      current.playedSetsCount > prev.playedSetsCount ? current : prev,
+    );
+
+    return new PlayerStatistic(bestStat);
   }
 }
 
@@ -586,17 +776,61 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   public override getTeams(
     competitionId: number,
   ): Promise<Pick<TeamInfo, 'id' | 'name' | 'competition'>[]> {
-    // const key = `federation:${this.federation.slug}:teams:${competitionId}`;
-    // return this.getOrSetCache(key, () => super.getTeams(competitionId));
-    return super.getTeams(competitionId);
+    const key = `federation:${this.federation.slug}:teams:${competitionId}`;
+    return this.getOrSetCache(key, () => super.getTeams(competitionId));
+    // return super.getTeams(competitionId);
   }
 
   public override getAllTeams(): Promise<
     Pick<TeamInfo, 'id' | 'name' | 'competition'>[]
   > {
-    // const key = `federation:${this.federation.slug}:allTeams`;
-    // return this.getOrSetCache(key, () => super.getAllTeams());
-    return super.getAllTeams();
+    const key = `federation:${this.federation.slug}:allTeams`;
+    return this.getOrSetCache(key, () => super.getAllTeams());
+    // return super.getAllTeams();
+  }
+
+  protected override getPlayersCount(competitionId: number): Promise<any> {
+    const key = `federation:${this.federation.slug}:${competitionId}:playersCount`;
+    return this.getOrSetCache(key, () => super.getPlayersCount(competitionId));
+    // return super.getPlayersCount(competitionId);
+  }
+
+  protected override getPlayersStatisticByCompetition(
+    competitionId: number,
+  ): Promise<PlayerStatistic[]> {
+    const key = `federation:${this.federation.slug}:${competitionId}:playersStatisticByCompetition`;
+    return this.getOrSetCache(
+      key,
+      () => super.getPlayersStatisticByCompetition(competitionId),
+      3600,
+    );
+    // return super.getPlayersStatisticByCompetition(competitionId);
+  }
+
+  protected override getPlayersStatistic(): Promise<PlayerStatistic[]> {
+    const key = `federation:${this.federation.slug}:playersStatistic`;
+    return this.getOrSetCache(key, () => super.getPlayersStatistic(), 3600);
+    // return super.getPlayersStatistic();
+  }
+
+  public override async getPlayerStatistic(
+    playerId: number,
+    teamId: number,
+  ): Promise<PlayerStatistic | null> {
+    const key = `federation:${this.federation.slug}:team:${teamId}:playerStatistic:${playerId}`;
+    const result = await this.getOrSetCache(
+      key,
+      () => super.getPlayerStatistic(playerId, teamId),
+      3600,
+    );
+
+    if (!result) {
+      return null;
+    }
+
+    return new PlayerStatistic(result);
+
+    // return super.getPlayerStatistic(playerId, teamId);
   }
 }
 

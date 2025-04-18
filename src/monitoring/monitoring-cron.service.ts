@@ -8,15 +8,11 @@ import { federations } from 'src/providers/dataproject/types';
 
 @Injectable()
 export class MonitoringCronService implements OnApplicationBootstrap {
-  constructor(
-    // private readonly dataprojectApiService: DataprojectApiService,
-    @InjectQueue(MONITOR_QUEUE) private monitorQueue: Queue,
-  ) {}
+  constructor(@InjectQueue(MONITOR_QUEUE) private monitorQueue: Queue) {}
 
   async onApplicationBootstrap() {
     Logger.debug(this.constructor.name);
-    // const client = this.dataprojectApiService.getClient('ossrb');
-    // const teams = await client.getAllTeams();
+
     // console.log(teams);
     await this.enqueueAllCountries();
   }
@@ -24,7 +20,14 @@ export class MonitoringCronService implements OnApplicationBootstrap {
   @Cron(CronExpression.EVERY_10_SECONDS)
   async enqueueAllCountries() {
     for (const federation of federations) {
-      await this.monitorQueue.add('monitor-federation', { federation });
+      await this.monitorQueue.add(
+        'monitor-federation',
+        { federation },
+        {
+          jobId: federation.slug,
+          removeOnComplete: true,
+        },
+      );
     }
   }
 }
