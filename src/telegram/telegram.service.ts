@@ -544,6 +544,9 @@ export class TelegramService implements OnApplicationBootstrap {
     chatId: number,
     federationSlug: FederationSlug,
   ) {
+    const federation = federations.find((f) => f.slug === federationSlug);
+    if (!federation) return;
+
     const monitoredRawTeams =
       await this.monitoringService.getMonitoredTeams(chatId);
 
@@ -560,35 +563,19 @@ export class TelegramService implements OnApplicationBootstrap {
     const uniqMonitoredCompetitions = Array.from(
       new Set<string>(monitoredTeams.map((t) => t.competition)),
     );
-    // console.log(uniqMonitoredCompetitions);
-
-    // await this.telegramBot.sendMessage(
-    //   chatId,
-    //   uniqMonitoredCompetitions.toString(),
-    // );
-
-    // const monitoredFederations = federations.filter((f) =>
-    //   monitoredTeams.some((t) => t.federationSlug === f.slug),
-    // );
-
-    // const client = this.dataprojectApiService.getClient(federationSlug);
-    // const teams = await client.getAllTeams();
-    // const competitions: Set<string> = new Set<string>(
-    //   teams.map((t) => t.competition),
-    // );
 
     const keyboard = uniqMonitoredCompetitions.reduce(
       (acc, competition, index) => {
         if (index % 2 === 0) {
           acc.push([
             {
-              text: competition,
+              text: `🏆 ${competition}`,
               callback_data: `send_monitored_competition_info:${federationSlug}:${competition}`,
             },
           ]);
         } else {
           acc[acc.length - 1].push({
-            text: competition,
+            text: `🏆 ${competition}`,
             callback_data: `send_monitored_competition_info:${federationSlug}:${competition}`,
           });
         }
@@ -604,11 +591,15 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    this.telegramBot.sendMessage(chatId, 'Выберите лигу', {
-      reply_markup: {
-        inline_keyboard: keyboard,
+    this.telegramBot.sendMessage(
+      chatId,
+      `${federation.emoji} ${federation.name}\nВыберите лигу:`,
+      {
+        reply_markup: {
+          inline_keyboard: keyboard,
+        },
       },
-    });
+    );
   }
 
   async sendMonitoredCompetitionInfo(
@@ -616,101 +607,70 @@ export class TelegramService implements OnApplicationBootstrap {
     federationSlug: FederationSlug,
     competition: string,
   ) {
+    const client = this.dataprojectApiService.getClient(federationSlug);
+
+    // Получаем отслеживаемые команды
     const monitoredRawTeams = await this.monitoringService.getMonitoredTeams(
       chatId,
       federationSlug,
     );
-    // const monitoredTeamIds = monitoredRawTeams.flatMap((f) => f.teamId);
 
-    // const teams = await this.dataprojectApiService
-    //   .getClient(federationSlug)
-    //   .getAllTeams();
+    const allTeams = await client.getAllTeams();
+    const matches = await client.getMatchesInfo();
 
-    // const monitoredTeams = teams
-    //   .filter((t) => t.competition === competition)
-    //   .filter((t) => monitoredTeamIds.some((id) => id === t.id));
-
-    let message = '📊 Ваш текущий мониторинг:\n';
-
-    const allTeams = await this.dataprojectApiService
-      .getClient(federationSlug)
-      .getAllTeams();
+    let message = `📊 *Мониторинг\n🏆 ${competition}*\n\n`;
 
     for (const teamData of monitoredRawTeams) {
-      const monitoredTeam = teamData as MonitoredTeam;
-      const { teamId, players: playerIds } = monitoredTeam;
+      const { teamId, players: playerIds } = teamData as MonitoredTeam;
+
+      // Ищем команду в указанном соревновании
       const team = allTeams.find(
         (t) => t.id === teamId && t.competition === competition,
       );
-
       if (!team) continue;
 
-      const players = await this.dataprojectApiService
-        .getClient(federationSlug)
-        .getTeamRoster(teamId);
+      // Получаем состав команды
+      const players = await client.getTeamRoster(teamId);
 
-      const matches = await this.dataprojectApiService
-        .getClient(federationSlug as FederationSlug)
-        .getMatchesInfo();
-
-      const liveTeam = matches
+      // Проверяем, есть ли у команды текущий матч
+      const liveMatch = matches
         .flatMap((m) => [m.home, m.guest])
         .find((t) => t.id === teamId);
 
-      let allPlayers = [...players];
+      // Объединяем игроков из состава и live-матча
+      let allPlayers = this.mergePlayers(
+        players,
+        liveMatch?.players ?? [],
+      ).filter((p) => playerIds.includes(p.id));
 
-      // Если есть liveTeam и у нее есть игроки, объединяем их
-      if (liveTeam?.players) {
-        // Используем Map для обеспечения уникальности по id
-        const playersMap = new Map<number, PlayerInfo>();
-
-        // Сначала добавляем игроков из основного списка
-        players.forEach((player) => playersMap.set(player.id, player));
-
-        // Затем добавляем игроков из liveTeam (перезаписываем только если их нет в основном списке)
-        liveTeam.players.forEach((player) => {
-          if (!playersMap.has(player.id)) {
-            playersMap.set(player.id, player);
-          }
-        });
-        allPlayers = Array.from(playersMap.values());
-      }
-      if (allPlayers.length > 0) {
-        message += `${team.name}\n\n`;
-
-        for (const player of allPlayers) {
-          player.statistic = await this.dataprojectApiService
-            .getClient(federationSlug)
-            .getPlayerStatistic(player.id, team.id);
-
-          const playerNumberString = player.number
-            ? `*[${player.number}]* `
-            : '';
-          const playerNameString = `*${player.fullName}* `;
-          const playerPositionString = player.position
-            ? `_(${player.position})_ `
-            : '';
-          const playerRatingString = player.statistic?.rating
-            ? `⭐️ *${player.statistic.rating.toFixed(2)}*`
-            : '';
-
-          message +=
-            playerNumberString +
-            playerNameString +
-            playerPositionString +
-            playerRatingString +
-            '\n';
+      // Загружаем недостающую статистику
+      for (const player of allPlayers) {
+        if (!player.statistic) {
+          const stat = await client.getPlayerStatistic(player.id, team.id);
+          if (stat) player.statistic = stat;
         }
-        message += '\n';
       }
+
+      // Сортировка по рейтингу
+      allPlayers = allPlayers.sort(
+        (a, b) => (b.statistic?.rating ?? 0) - (a.statistic?.rating ?? 0),
+      );
+
+      if (allPlayers.length === 0) continue;
+
+      // Заголовок команды
+      message += `👥 *${team.name}*\n`;
+
+      // Игроки
+      for (const player of allPlayers) {
+        message += this.formatPlayerInfo(player) + '\n';
+      }
+
+      message += '\n';
     }
 
-    // const normalizedMessage = message.replace(
-    //   /([_*[\]()~`>#+=|{}.!\\])/g,
-    //   '\\$1',
-    // );
-    // console.log(normalizedMessage);
-    this.telegramBot.sendMessage(chatId, message, {
+    // Отправка сообщения
+    await this.telegramBot.sendMessage(chatId, message, {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
@@ -723,5 +683,33 @@ export class TelegramService implements OnApplicationBootstrap {
         ],
       },
     });
+  }
+  private mergePlayers(
+    basePlayers: PlayerInfo[],
+    livePlayers: PlayerInfo[],
+  ): PlayerInfo[] {
+    const playersMap = new Map<number, PlayerInfo>();
+
+    basePlayers.forEach((player) => playersMap.set(player.id, player));
+    livePlayers.forEach((player) => {
+      if (!playersMap.has(player.id)) {
+        playersMap.set(player.id, player);
+      }
+    });
+
+    return Array.from(playersMap.values());
+  }
+
+  private formatPlayerInfo(player: PlayerInfo): string {
+    const parts = [
+      player.number ? `[[${player.number}]] ` : '',
+      `\`${player.fullName}\``,
+      player.position ? `_(${player.position})_` : '',
+      player.statistic?.rating
+        ? `⭐️ *${player.statistic.rating.toFixed(2)}*`
+        : '',
+    ];
+
+    return parts.filter(Boolean).join(' ');
   }
 }
