@@ -84,13 +84,13 @@ export class MonitoringProcessor {
       const client = this.dataprojectApiService.getClient(federation);
       const matches = await client.getMatchesInfo();
 
-      const now = moment.utc();
+      const oneHourBefore = moment.utc().subtract(1, 'hour');
       const oneHourLater = moment.utc().add(1, 'hour');
 
       const upcomingMatches = matches.filter(
         (match) =>
           match.matchDateTimeUtc &&
-          moment.utc(match.matchDateTimeUtc).isAfter(now) &&
+          moment.utc(match.matchDateTimeUtc).isAfter(oneHourBefore) &&
           moment.utc(match.matchDateTimeUtc).isSameOrBefore(oneHourLater),
       );
 
@@ -104,6 +104,7 @@ export class MonitoringProcessor {
         await this.monitoringService.getAllMonitoredTeams(federation);
 
       for (const match of upcomingMatches) {
+        // Logger.debug(match);
         const homeTeamId = match.home.id;
         const guestTeamId = match.guest.id;
 
@@ -145,12 +146,16 @@ export class MonitoringProcessor {
             .getPlayerStatistic(player.id, match.home.id);
         }
 
-        for (const player of homeTeamPlayers) {
+        for (const player of guestTeamPlayers) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id);
+            .getPlayerStatistic(player.id, match.guest.id);
         }
 
+        // Logger.verbose(homeTeamPlayers, 'homeTeamPlayers');
+        // Logger.verbose(homeTeamPlayers, 'guestTeamPlayers');
+        // Logger.debug(match.home.players, 'match.home.players');
+        // Logger.debug(match.guest.players, 'match.guest.players');
         // Подготавливаем данные по командам
         const homeTeamData = {
           team: match.home,
@@ -181,6 +186,9 @@ export class MonitoringProcessor {
               (t) => t.userId === userId && t.teamId === guestTeamId,
             ),
           );
+
+          // Logger.verbose(homeResult, 'homeResult');
+          // Logger.verbose(guestResult, 'guestResult');
 
           const commonEventFields = {
             userId,

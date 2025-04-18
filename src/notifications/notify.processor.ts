@@ -121,10 +121,8 @@ export class NotifyProcessor {
     try {
       const event = job.data;
 
-      Logger.verbose('event', event);
-      Logger.verbose('eventHash', job.id);
-
-      Logger.verbose(JSON.stringify(event, null, 2));
+      // Logger.verbose(job.id);
+      Logger.verbose(event, job.id);
 
       const message = this.formatNotification(event);
 

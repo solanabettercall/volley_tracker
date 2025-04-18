@@ -529,12 +529,17 @@ class DataprojectFederationClient {
       I: string;
     }>(config);
 
+    const teamRoster: PlayerInfo[] = await this.getTeamRoster(teamId);
+
     const players: PlayerInfo[] = data.R.map((r) => {
-      return {
+      const basePlayer = {
         id: r.PID,
         number: r.N,
         fullName: `${r.SR} ${r.NM}`,
       };
+
+      const extraInfo = teamRoster.find((p) => p.id === r.PID);
+      return Object.assign(basePlayer, extraInfo);
     });
     return players;
   }
@@ -546,6 +551,7 @@ class DataprojectFederationClient {
       case 'libero':
         return PlayerPosition.L;
       case 'middle-blocker':
+      case 'middle blocker':
         return PlayerPosition.МВ;
       case 'opposite':
         return PlayerPosition.О;
