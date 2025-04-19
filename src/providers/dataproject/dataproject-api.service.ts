@@ -555,14 +555,16 @@ class DataprojectFederationClient {
         return PlayerPosition.L;
       case 'middle-blocker':
       case 'middle blocker':
-        return PlayerPosition.МВ;
+        return PlayerPosition.MB;
       case 'opposite':
-        return PlayerPosition.О;
+        return PlayerPosition.O;
       case 'setter':
         return PlayerPosition.S;
       case 'wing-spiker':
       case 'wing spiker':
         return PlayerPosition.WS;
+      case 'universal':
+        return PlayerPosition.U;
       case '-':
         return null;
 
@@ -635,7 +637,6 @@ class DataprojectFederationClient {
             });
           }
         });
-      // Logger.debug(`Команда ${teamId} игроков ${players.length}`);
       return players;
     } catch (error) {
       Logger.error('Ошибка при получении состава команды:', error);
@@ -644,8 +645,6 @@ class DataprojectFederationClient {
   }
 
   protected async getMatchActivePlayerIds(matchId: number): Promise<number[]> {
-    // Logger.debug('getMatchActivePlayerIds');
-
     const connectionToken = await this.ensureConnectionToken();
 
     const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.federation.slug}"],"I":0}`;
