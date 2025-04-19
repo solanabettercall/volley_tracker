@@ -243,9 +243,12 @@ class DataprojectFederationClient {
         params,
       });
       const $ = cheerio.load(response.data);
-      const competition = $('div#LYR_Menu h2.CompetitionDescription_Header')
+      let competition = $('div#LYR_Menu h2.CompetitionDescription_Header')
         .text()
         .trim();
+      if (!competition) {
+        competition = $('h2.CompetitionDescription_Header').text().trim();
+      }
 
       $('div.RadAjaxPanel div.rlvI[onclick]').each((_, element) => {
         const onclick = $(element).attr('onclick') ?? '';
