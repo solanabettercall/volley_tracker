@@ -743,7 +743,6 @@ export class TelegramService implements OnApplicationBootstrap {
 
     for (const teamData of monitoredRawTeams) {
       const { teamId, players: playerIds } = teamData as MonitoredTeam;
-
       const team = allTeams.find(
         (t) => t.id === teamId && t.competition === context.competition,
       );
@@ -835,7 +834,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     const parts = [
       player.number ? `[[${player.number}]] ` : '',
-      `\`${player.fullName}\``,
+      `*${player.fullName}*`,
       player.position ? `_(${player.position})_` : '',
       ratingPart,
     ];

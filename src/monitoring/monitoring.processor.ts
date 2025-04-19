@@ -49,20 +49,20 @@ export class MonitoringProcessor {
   ) {}
 
   private hashEvent(event: LineupEvent | SubstitutionEvent): string {
-    const normalizePlayers = (players: PlayerInfo[]) =>
-      players.map((p) => p.id).sort((a, b) => a - b);
+    // const normalizePlayers = (players: PlayerInfo[]) =>
+    //   players.map((p) => p.id).sort((a, b) => a - b);
 
     const normalized = {
-      home: {
-        missingPlayerIds: normalizePlayers(event.home.missingPlayers),
-        inactivePlayerIds: normalizePlayers(event.home.inactivePlayers),
-        teamId: event.home.team.id,
-      },
-      guest: {
-        missingPlayerIds: normalizePlayers(event.guest.missingPlayers),
-        inactivePlayerIds: normalizePlayers(event.guest.inactivePlayers),
-        teamId: event.guest.team.id,
-      },
+      // home: {
+      //   missingPlayerIds: normalizePlayers(event.home.missingPlayers),
+      //   inactivePlayerIds: normalizePlayers(event.home.inactivePlayers),
+      //   teamId: event.home.team.id,
+      // },
+      // guest: {
+      //   missingPlayerIds: normalizePlayers(event.guest.missingPlayers),
+      //   inactivePlayerIds: normalizePlayers(event.guest.inactivePlayers),
+      //   teamId: event.guest.team.id,
+      // },
       matchId: event.match.id,
       federationSlug: event.federation.slug,
       userId: event.userId,
@@ -104,7 +104,6 @@ export class MonitoringProcessor {
         await this.monitoringService.getAllMonitoredTeams(federation);
 
       for (const match of upcomingMatches) {
-        // Logger.debug(match);
         const homeTeamId = match.home.id;
         const guestTeamId = match.guest.id;
 
@@ -120,7 +119,6 @@ export class MonitoringProcessor {
             .getPlayerStatistic(player.id, match.home.id);
         }
 
-        // Находим пользователей, которые отслеживают команды в этом матче
         const usersMonitoringMatch = new Set<number>();
         const homeTeamMonitors = monitoredTeams.filter(
           (t) => t.teamId === homeTeamId,
@@ -134,7 +132,6 @@ export class MonitoringProcessor {
 
         if (usersMonitoringMatch.size === 0) continue;
 
-        // Получаем составы команд
         const [homeTeamPlayers, guestTeamPlayers] = await Promise.all([
           client.getTeamRoster(homeTeamId),
           client.getTeamRoster(guestTeamId),
@@ -152,11 +149,6 @@ export class MonitoringProcessor {
             .getPlayerStatistic(player.id, match.guest.id);
         }
 
-        // Logger.verbose(homeTeamPlayers, 'homeTeamPlayers');
-        // Logger.verbose(homeTeamPlayers, 'guestTeamPlayers');
-        // Logger.debug(match.home.players, 'match.home.players');
-        // Logger.debug(match.guest.players, 'match.guest.players');
-        // Подготавливаем данные по командам
         const homeTeamData = {
           team: match.home,
           playersInMatch: match.home.players,
@@ -169,9 +161,7 @@ export class MonitoringProcessor {
           teamPlayers: guestTeamPlayers,
         };
 
-        // Обрабатываем каждого пользователя
         for (const userId of usersMonitoringMatch) {
-          // Обрабатываем домашнюю команду
           const homeResult = this.processTeamForUser(
             homeTeamData,
             monitoredTeams.filter(
@@ -179,16 +169,12 @@ export class MonitoringProcessor {
             ),
           );
 
-          // Обрабатываем гостевую команду
           const guestResult = this.processTeamForUser(
             guestTeamData,
             monitoredTeams.filter(
               (t) => t.userId === userId && t.teamId === guestTeamId,
             ),
           );
-
-          // Logger.verbose(homeResult, 'homeResult');
-          // Logger.verbose(guestResult, 'guestResult');
 
           const commonEventFields = {
             userId,
@@ -205,7 +191,6 @@ export class MonitoringProcessor {
             },
           };
 
-          // Создаем события только если есть что сообщать
           if (
             homeResult.missingPlayers.length > 0 ||
             guestResult.missingPlayers.length > 0
@@ -257,7 +242,6 @@ export class MonitoringProcessor {
     if (userTeams.length === 0) {
       return { missingPlayers: [], inactivePlayers: [] };
     }
-    Logger.debug(teamData, 'processTeamForUser');
     const playersInMatchMap = new Map(
       teamData.playersInMatch.map((p) => [p.id, p]),
     );
