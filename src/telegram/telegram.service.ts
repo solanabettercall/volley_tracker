@@ -79,7 +79,11 @@ export class TelegramService implements OnApplicationBootstrap {
       const contextHash = callbackQuery.data;
       const context = await this.getCallbackContext(contextHash);
       const event: string | null = context?.event ?? null;
-      if (!msg || !contextHash) return;
+
+      if (!msg || !contextHash || !context) {
+        await this.sendMainMenu(callbackQuery.from.id);
+        await this.telegramBot.answerCallbackQuery(callbackQuery.id);
+      }
 
       Logger.verbose(context);
 
@@ -1044,6 +1048,8 @@ export class TelegramService implements OnApplicationBootstrap {
     competition: string,
     teamId: number,
   ) {
+    const federation = federations.find((f) => f.slug === federationSlug);
+    if (!federation) return;
     const client = this.dataprojectApiService.getClient(federationSlug);
 
     const allTeams = await client.getAllTeams();
@@ -1077,7 +1083,7 @@ export class TelegramService implements OnApplicationBootstrap {
     );
 
     let message = '';
-    message += `📊 Статистика команды\n🏆 *${competition}*\n👥 *${team.name}*\n\n`;
+    message += `📊 Статистика команды\n${federation.emoji} ${federation.name}\n🏆 *${competition}*\n👥 *${team.name}*\n\n`;
 
     for (const player of allPlayers) {
       message += this.formatPlayerInfo(player) + '\n';
