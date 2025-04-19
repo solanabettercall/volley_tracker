@@ -767,9 +767,7 @@ export class TelegramService implements OnApplicationBootstrap {
         }
       }
 
-      allPlayers = allPlayers.sort(
-        (a, b) => (b.statistic?.rating ?? 0) - (a.statistic?.rating ?? 0),
-      );
+      allPlayers = this.sortPlayersByRating(allPlayers);
 
       if (allPlayers.length === 0) continue;
 
@@ -800,6 +798,16 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     });
   }
+  private sortPlayersByRating(allPlayers: PlayerInfo[]) {
+    return allPlayers.sort((a, b) => {
+      if (a.statistic?.rating === null || a.statistic?.rating === undefined)
+        return 1;
+      if (b.statistic?.rating === null || b.statistic?.rating === undefined)
+        return -1;
+      return b.statistic?.rating - a.statistic?.rating;
+    });
+  }
+
   private mergePlayers(
     basePlayers: PlayerInfo[],
     livePlayers: PlayerInfo[],
@@ -817,13 +825,19 @@ export class TelegramService implements OnApplicationBootstrap {
   }
 
   private formatPlayerInfo(player: PlayerInfo): string {
+    let ratingPart = '';
+    if (player.statistic) {
+      ratingPart += player.statistic?.rating
+        ? `\n⭐️ *${player.statistic.rating.toFixed(2)}*`
+        : '\n⭐️ *0.00*';
+      ratingPart += ` (${player.statistic.totalPoints ?? 0}/${player.statistic.playedSetsCount})`;
+    }
+
     const parts = [
       player.number ? `[[${player.number}]] ` : '',
       `\`${player.fullName}\``,
       player.position ? `_(${player.position})_` : '',
-      player.statistic?.rating
-        ? `⭐️ *${player.statistic.rating.toFixed(2)}*`
-        : '⭐️ *0.00*',
+      ratingPart,
     ];
 
     return parts.filter(Boolean).join(' ');
@@ -1017,9 +1031,13 @@ export class TelegramService implements OnApplicationBootstrap {
       }
     }
 
-    allPlayers = allPlayers.sort(
-      (a, b) => (b.statistic?.rating ?? 0) - (a.statistic?.rating ?? 0),
-    );
+    allPlayers = allPlayers.sort((a, b) => {
+      if (a.statistic?.rating === null || a.statistic?.rating === undefined)
+        return 1;
+      if (b.statistic?.rating === null || b.statistic?.rating === undefined)
+        return -1;
+      return b.statistic.rating - a.statistic.rating;
+    });
 
     let message = '';
     message += `📊 *Статистика команды*\n${federation.emoji} *${federation.name}*\n🏆 *${context.competition}*\n👥 *${team.name}*\n\n`;
