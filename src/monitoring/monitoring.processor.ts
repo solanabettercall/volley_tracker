@@ -257,7 +257,7 @@ export class MonitoringProcessor {
     if (userTeams.length === 0) {
       return { missingPlayers: [], inactivePlayers: [] };
     }
-
+    Logger.debug(teamData, 'processTeamForUser');
     const playersInMatchMap = new Map(
       teamData.playersInMatch.map((p) => [p.id, p]),
     );
