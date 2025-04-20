@@ -5,9 +5,10 @@ export enum MatchStatus {
 }
 
 export enum PlayerPosition {
-  МВ = 'MB', // Middle-blocker
-  О = 'O', // Opposite
+  MB = 'MB', // Middle-blocker
+  O = 'O', // Opposite
   WS = 'WS', // Wing-spiker
   S = 'S', // Setter
   L = 'L', // Libero
+  U = 'U', // Universal
 }

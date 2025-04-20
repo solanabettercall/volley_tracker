@@ -465,25 +465,31 @@ class DataprojectFederationClient {
 
     const updatedMatches = await Promise.all(
       matches.map(async (match) => {
-        const activePlayerIds = await this.getMatchActivePlayerIds(match.id);
+        const activePlayers = await this.getMatchActivePlayers(match.id);
 
-        if (activePlayerIds.length !== 12) return match;
+        if (activePlayers.length !== 12) return match;
 
-        const setIsActive = (players: PlayerInfo[]): PlayerInfo[] =>
+        const setIsActive = (
+          players: PlayerInfo[],
+          isHome: boolean,
+        ): PlayerInfo[] =>
           players.map((p) => ({
             ...p,
-            isActive: activePlayerIds.includes(p.id),
+            isActive: activePlayers.some(
+              (a) =>
+                a.id === p.id && a.isHome === isHome && a.number === p.number,
+            ),
           }));
 
         return {
           ...match,
           home: {
             ...match.home,
-            players: setIsActive(match.home.players),
+            players: setIsActive(match.home.players, true),
           },
           guest: {
             ...match.guest,
-            players: setIsActive(match.guest.players),
+            players: setIsActive(match.guest.players, false),
           },
         };
       }),
@@ -555,14 +561,16 @@ class DataprojectFederationClient {
         return PlayerPosition.L;
       case 'middle-blocker':
       case 'middle blocker':
-        return PlayerPosition.МВ;
+        return PlayerPosition.MB;
       case 'opposite':
-        return PlayerPosition.О;
+        return PlayerPosition.O;
       case 'setter':
         return PlayerPosition.S;
       case 'wing-spiker':
       case 'wing spiker':
         return PlayerPosition.WS;
+      case 'universal':
+        return PlayerPosition.U;
       case '-':
         return null;
 
@@ -635,7 +643,6 @@ class DataprojectFederationClient {
             });
           }
         });
-      // Logger.debug(`Команда ${teamId} игроков ${players.length}`);
       return players;
     } catch (error) {
       Logger.error('Ошибка при получении состава команды:', error);
@@ -643,9 +650,9 @@ class DataprojectFederationClient {
     }
   }
 
-  protected async getMatchActivePlayerIds(matchId: number): Promise<number[]> {
-    // Logger.debug('getMatchActivePlayerIds');
-
+  protected async getMatchActivePlayers(
+    matchId: number,
+  ): Promise<{ id: number; number: number; isHome: boolean }[]> {
     const connectionToken = await this.ensureConnectionToken();
 
     const payload = `data={"H":"signalrlivehubfederations","M":"getLineUpData","A":["${matchId}","${this.federation.slug}"],"I":0}`;
@@ -690,7 +697,11 @@ class DataprojectFederationClient {
       I: string;
     }>(config);
 
-    return data.R.map((R) => R.PID);
+    return data.R.map((R) => ({
+      id: R.PID,
+      number: R.PN,
+      isHome: R.HG,
+    }));
   }
 
   protected async getPlayerStatistic(
