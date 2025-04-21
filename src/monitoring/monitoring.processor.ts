@@ -140,8 +140,8 @@ export class MonitoringProcessor {
         if (usersMonitoringMatch.size === 0) continue;
 
         const [homeTeamPlayers, guestTeamPlayers] = await Promise.all([
-          client.getTeamRoster(homeTeamId, match.competition?.id),
-          client.getTeamRoster(guestTeamId, match.competition?.id),
+          client.getTeamRoster(homeTeamId, match.competition.id),
+          client.getTeamRoster(guestTeamId, match.competition.id),
         ]);
 
         for (const player of homeTeamPlayers) {

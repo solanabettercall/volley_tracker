@@ -67,9 +67,6 @@ export class NotifyProcessor {
     teamName: string,
     isHome: boolean,
   ): string {
-    if (!missing.length && !inactive.length) {
-      return '\n';
-    }
     const parts: string[] = [];
     // `🔴 *${home.team.name.toUpperCase()}:*`,
     parts.push(`\n${isHome ? '🔴' : '🔵'} *${teamName.toUpperCase()}:*`);
@@ -83,6 +80,10 @@ export class NotifyProcessor {
       all.filter((p) => p.isActive),
       '🟢',
     );
+
+    if (!missing.length && !inactive.length && !active) {
+      return '\n';
+    }
     if (active) parts.push(`👥 *Основной состав:*\n${active}`);
     return parts.join('\n\n');
   }
