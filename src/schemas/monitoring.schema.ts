@@ -12,6 +12,9 @@ export class MonitoredTeam extends Document {
   @Prop({ required: true, type: Number })
   teamId: number;
 
+  @Prop({ required: true, type: Number })
+  competitionId: number;
+
   @Prop({ type: [Number], default: [] })
   players: number[];
 }

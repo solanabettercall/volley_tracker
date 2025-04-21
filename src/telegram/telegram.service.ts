@@ -16,7 +16,7 @@ interface ICallbackContext {
   event: string;
   chatId: number;
   federationSlug?: FederationSlug;
-  competition?: string;
+  competitionId?: number;
   teamId?: number;
   playerId?: number;
   messageId?: number;
@@ -171,10 +171,12 @@ export class TelegramService implements OnApplicationBootstrap {
     if (!federation) return;
 
     const client = this.dataprojectApiService.getClient(context.federationSlug);
-    const teams = await client.getAllTeams();
-    const competitions: string[] = Array.from(
-      new Set(teams.map((t) => t.competition)),
-    );
+    const competitions = await client.getCompetitions();
+    // console.log(competitions);
+    // const teams = await client.getAllTeams();
+    // const competitions: string[] = Array.from(
+    //   new Set(teams.map((t) => t.competition)),
+    // );
 
     const keyboard = [];
     for (const competition of competitions) {
@@ -182,11 +184,11 @@ export class TelegramService implements OnApplicationBootstrap {
         event: 'select_competition',
         chatId: context.chatId,
         federationSlug: context.federationSlug,
-        competition,
+        competitionId: competition.id,
       });
       keyboard.push([
         {
-          text: competition,
+          text: competition.name,
           callback_data: key,
         },
       ]);
@@ -222,19 +224,21 @@ export class TelegramService implements OnApplicationBootstrap {
     const alreadyMonitored = monitoredTeam.includes(context.playerId);
 
     if (alreadyMonitored) {
-      await this.monitoringService.removePlayerFromMonitoring(
-        context.chatId,
-        context.federationSlug,
-        context.teamId,
-        context.playerId,
-      );
+      await this.monitoringService.removePlayerFromMonitoring({
+        competitionId: context.competitionId,
+        federationSlug: context.federationSlug,
+        playerId: context.playerId,
+        teamId: context.teamId,
+        userId: context.chatId,
+      });
     } else {
-      await this.monitoringService.addPlayerToMonitoring(
-        context.chatId,
-        context.federationSlug,
-        context.teamId,
-        context.playerId,
-      );
+      await this.monitoringService.addPlayerToMonitoring({
+        competitionId: context.competitionId,
+        federationSlug: context.federationSlug,
+        playerId: context.playerId,
+        teamId: context.teamId,
+        userId: context.chatId,
+      });
     }
 
     const players = await this.dataprojectApiService
@@ -256,7 +260,7 @@ export class TelegramService implements OnApplicationBootstrap {
             event: 'toggle_player',
             chatId: context.chatId,
             federationSlug: context.federationSlug,
-            competition: context.competition,
+            competitionId: context.competitionId,
             teamId: context.teamId,
             playerId: player.id,
             messageId: context.messageId,
@@ -273,7 +277,7 @@ export class TelegramService implements OnApplicationBootstrap {
             event: 'stop_monitoring',
             chatId: context.chatId,
             federationSlug: context.federationSlug,
-            competition: context.competition,
+            competitionId: context.competitionId,
             teamId: context.teamId,
           }),
         },
@@ -287,7 +291,7 @@ export class TelegramService implements OnApplicationBootstrap {
           event: 'back_to_teams',
           chatId: context.chatId,
           federationSlug: context.federationSlug,
-          competition: context.competition,
+          competitionId: context.competitionId,
         }),
       },
       { text: '🏠 На главную', callback_data: 'back_to_main' },
@@ -307,12 +311,13 @@ export class TelegramService implements OnApplicationBootstrap {
     );
 
     for (const playerId of monitoredPlayers) {
-      await this.monitoringService.removePlayerFromMonitoring(
-        context.chatId,
-        context.federationSlug,
-        context.teamId,
+      await this.monitoringService.removePlayerFromMonitoring({
+        competitionId: context.competitionId,
+        federationSlug: context.federationSlug,
         playerId,
-      );
+        teamId: context.teamId,
+        userId: context.chatId,
+      });
     }
 
     const teams = await this.dataprojectApiService
@@ -415,29 +420,22 @@ export class TelegramService implements OnApplicationBootstrap {
     if (!federation) return;
 
     const client = this.dataprojectApiService.getClient(federation.slug);
-    const teamList = await client.getAllTeams();
-    const filteredTeams = teamList.filter(
-      (t) => t.competition === context.competition,
-    );
+    const competition = await client.getCompetitionById(context.competitionId);
+    const teamList = await client.getTeams(context.competitionId);
 
     const matches = await client.getMatchesInfo();
     const filteredMatches = matches.filter(
-      (m) => m.competition === context.competition,
+      (m) => m.competition.id === context.competitionId,
     );
     const matchTeams = filteredMatches.flatMap((m) => [m.guest, m.home]);
-    const allTeams = [...filteredTeams, ...matchTeams];
+    const allTeams = [...teamList, ...matchTeams];
     const uniqueTeamsMap = new Map<number, (typeof allTeams)[number]>();
 
     for (const team of allTeams) {
       uniqueTeamsMap.set(team.id, team);
     }
 
-    const uniqueTeams = Array.from(uniqueTeamsMap.values()).sort((a, b) => {
-      if (a.competition === b.competition) {
-        return a.name.localeCompare(b.name);
-      }
-      return a.competition.localeCompare(b.competition);
-    });
+    const uniqueTeams = Array.from(uniqueTeamsMap.values());
 
     const keyboard = [];
 
@@ -449,7 +447,7 @@ export class TelegramService implements OnApplicationBootstrap {
             event: 'select_team',
             chatId: context.chatId,
             federationSlug: context.federationSlug,
-            competition: context.competition,
+            competitionId: context.competitionId,
             teamId: team.id,
           }),
         },
@@ -468,7 +466,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.sendMessage(
       context.chatId,
-      `${federation.emoji} ${federation.name}\n🏆 ${context.competition}\n\n👥 Выберите команду:`,
+      `${federation.emoji} ${federation.name}\n🏆 ${competition.name}\n\n👥 Выберите команду:`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -481,6 +479,10 @@ export class TelegramService implements OnApplicationBootstrap {
     const players = await this.dataprojectApiService
       .getClient(context.federationSlug)
       .getTeamRoster(context.teamId);
+
+    const competition = await this.dataprojectApiService
+      .getClient(context.federationSlug)
+      .getCompetitionById(context.competitionId);
 
     const matches = await this.dataprojectApiService
       .getClient(context.federationSlug)
@@ -531,7 +533,7 @@ export class TelegramService implements OnApplicationBootstrap {
             event: 'toggle_player',
             chatId: context.chatId,
             federationSlug: context.federationSlug,
-            competition: context.competition,
+            competitionId: context.competitionId,
             teamId: context.teamId,
             playerId: player.id,
           }),
@@ -547,7 +549,7 @@ export class TelegramService implements OnApplicationBootstrap {
             event: 'stop_monitoring',
             chatId: context.chatId,
             federationSlug: context.federationSlug,
-            competition: context.competition,
+            competitionId: context.competitionId,
             teamId: context.teamId,
           }),
         },
@@ -561,7 +563,7 @@ export class TelegramService implements OnApplicationBootstrap {
           event: 'back_to_teams',
           chatId: context.chatId,
           federationSlug: context.federationSlug,
-          competition: context.competition,
+          competitionId: context.competitionId,
         }),
       },
       {
@@ -575,7 +577,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.sendMessage(
       context.chatId,
-      `${federation.emoji} ${federation.name}\n🏆 ${context.competition}\n👥 ${team.name}\n\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
+      `${federation.emoji} ${federation.name}\n🏆 ${competition.name}\n👥 ${team.name}\n\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -585,12 +587,11 @@ export class TelegramService implements OnApplicationBootstrap {
   }
 
   private async sendMonitoredFederations(context: ICallbackContext) {
-    const monitoredTeams = await this.monitoringService.getMonitoredTeams(
-      context.chatId,
-    );
+    const monitoredFederationsSlug =
+      await this.monitoringService.getMonitoredFederationSlugs(context.chatId);
 
     const monitoredFederations = federations.filter((f) =>
-      monitoredTeams.some((t) => t.federationSlug === f.slug),
+      monitoredFederationsSlug.some((slug) => slug === f.slug),
     );
 
     if (!monitoredFederations || monitoredFederations.length === 0) {
@@ -668,38 +669,62 @@ export class TelegramService implements OnApplicationBootstrap {
     );
     if (!federation) return;
 
-    const monitoredRawTeams = await this.monitoringService.getMonitoredTeams(
-      context.chatId,
-    );
+    const monitoredCompetitionIds =
+      await this.monitoringService.getMonitoredCompetitionIds(
+        context.chatId,
+        context.federationSlug,
+      );
 
-    const monitoredTeamIds = monitoredRawTeams.flatMap((f) => f.teamId);
+    console.log(monitoredCompetitionIds);
 
-    const teams = await this.dataprojectApiService
+    // const monitoredCompetitionIds = monitoredRawTeams.flatMap(
+    //   (f) => f.competitionId,
+    // );
+    // const uniqMonitoredCompetitionIds = Array.from(
+    //   new Set<number>(monitoredCompetitionIds),
+    // );
+
+    // const competitions = [];
+    // for(const competitionId of uniqMonitoredCompetitionIds){
+    //   const competition = await this.dataprojectApiService
+    //     .getClient(context.federationSlug)
+    //     .getCompetitions();
+    //   competitions.push
+    // }
+
+    const allCompetitions = await this.dataprojectApiService
       .getClient(context.federationSlug)
-      .getAllTeams();
+      .getCompetitions();
 
-    const monitoredTeams = teams.filter((t) =>
-      monitoredTeamIds.some((id) => id === t.id),
+    const monitoredCompetitions = allCompetitions.filter((c) =>
+      monitoredCompetitionIds.includes(c.id),
     );
+    // const teams = await this.dataprojectApiService
+    //   .getClient(context.federationSlug)
+    //   .getAllTeams();
 
-    const uniqMonitoredCompetitions = Array.from(
-      new Set<string>(monitoredTeams.map((t) => t.competition)),
-    );
+    // const monitoredTeams = teams.filter((t) =>
+    //   monitoredTeamIds.some((id) => id === t.id),
+    // );
+
+    // const uniqMonitoredCompetitions = Array.from(
+    //   new Set<string>(monitoredTeams.map((t) => t.competition)),
+    // );
 
     const keyboard = [];
 
-    for (let i = 0; i < uniqMonitoredCompetitions.length; i += 2) {
+    for (let i = 0; i < monitoredCompetitions.length; i += 2) {
       const row = [];
 
-      for (let j = 0; j < 2 && i + j < uniqMonitoredCompetitions.length; j++) {
-        const competition = uniqMonitoredCompetitions[i + j];
+      for (let j = 0; j < 2 && i + j < monitoredCompetitions.length; j++) {
+        const competition = monitoredCompetitions[i + j];
         row.push({
-          text: `${competition}`,
+          text: competition.name,
           callback_data: await this.storeCallbackContext({
             event: 'send_monitored_competition_info',
             chatId: context.chatId,
             federationSlug: context.federationSlug,
-            competition,
+            competitionId: competition.id,
           }),
         });
       }
@@ -730,22 +755,22 @@ export class TelegramService implements OnApplicationBootstrap {
 
   async sendMonitoredCompetitionInfo(context: ICallbackContext) {
     const client = this.dataprojectApiService.getClient(context.federationSlug);
+    const competition = await client.getCompetitionById(context.competitionId);
 
     const monitoredRawTeams = await this.monitoringService.getMonitoredTeams(
       context.chatId,
       context.federationSlug,
+      context.competitionId,
     );
 
-    const allTeams = await client.getAllTeams();
+    const allTeams = await client.getTeams(context.competitionId);
     const matches = await client.getMatchesInfo();
 
-    let message = `📊 *Мониторинг\n🏆 ${context.competition}*\n\n`;
+    let message = `📊 *Мониторинг\n🏆 ${competition.name}*\n\n`;
 
     for (const teamData of monitoredRawTeams) {
-      const { teamId, players: playerIds } = teamData as MonitoredTeam;
-      const team = allTeams.find(
-        (t) => t.id === teamId && t.competition === context.competition,
-      );
+      const { teamId, players: playerIds } = teamData;
+      const team = allTeams.find((t) => t.id === teamId);
       if (!team) continue;
 
       const players = await client.getTeamRoster(teamId);
@@ -886,22 +911,21 @@ export class TelegramService implements OnApplicationBootstrap {
     );
     if (!federation) return;
 
-    const teams = await this.dataprojectApiService
+    const competitions = await this.dataprojectApiService
       .getClient(context.federationSlug)
-      .getAllTeams();
-    const competitions = Array.from(new Set(teams.map((t) => t.competition)));
+      .getCompetitions();
 
     const keyboard = [];
 
     for (const competition of competitions) {
       keyboard.push([
         {
-          text: competition,
+          text: competition.name,
           callback_data: await this.storeCallbackContext({
             chatId: context.chatId,
             event: 'send_statistic_teams',
             federationSlug: context.federationSlug,
-            competition,
+            competitionId: competition.id,
           }),
         },
       ]);
@@ -935,29 +959,22 @@ export class TelegramService implements OnApplicationBootstrap {
     if (!federation) return;
 
     const client = this.dataprojectApiService.getClient(context.federationSlug);
-    const teamList = await client.getAllTeams();
-    const filteredTeams = teamList.filter(
-      (t) => t.competition === context.competition,
-    );
+    const competition = await client.getCompetitionById(context.competitionId);
+    const teamList = await client.getTeams(context.competitionId);
 
     const matches = await client.getMatchesInfo();
     const filteredMatches = matches.filter(
-      (m) => m.competition === context.competition,
+      (m) => m.competition.id === context.competitionId,
     );
     const matchTeams = filteredMatches.flatMap((m) => [m.guest, m.home]);
-    const allTeams = [...filteredTeams, ...matchTeams];
+    const allTeams = [...teamList, ...matchTeams];
     const uniqueTeamsMap = new Map<number, (typeof allTeams)[number]>();
 
     for (const team of allTeams) {
       uniqueTeamsMap.set(team.id, team);
     }
 
-    const uniqueTeams = Array.from(uniqueTeamsMap.values()).sort((a, b) => {
-      if (a.competition === b.competition) {
-        return a.name.localeCompare(b.name);
-      }
-      return a.competition.localeCompare(b.competition);
-    });
+    const uniqueTeams = Array.from(uniqueTeamsMap.values());
     const keyboard = [];
 
     for (const team of uniqueTeams) {
@@ -968,7 +985,7 @@ export class TelegramService implements OnApplicationBootstrap {
             event: 'send_team_statistic',
             chatId: context.chatId,
             federationSlug: context.federationSlug,
-            competition: context.competition,
+            competitionId: context.competitionId,
             teamId: team.id,
           }),
         },
@@ -986,9 +1003,9 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    this.telegramBot.sendMessage(
+    await this.telegramBot.sendMessage(
       context.chatId,
-      `${federation.emoji} ${federation.name}\n🏆 ${context.competition}\n\n👥 Выберите команду:`,
+      `${federation.emoji} ${federation.name}\n🏆 ${competition.name}\n\n👥 Выберите команду:`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -1003,13 +1020,11 @@ export class TelegramService implements OnApplicationBootstrap {
     );
     if (!federation) return;
     const client = this.dataprojectApiService.getClient(context.federationSlug);
-
-    const allTeams = await client.getAllTeams();
+    const competition = await client.getCompetitionById(context.competitionId);
+    const teams = await client.getTeams(context.competitionId);
     const matches = await client.getMatchesInfo();
 
-    const team = allTeams.find(
-      (t) => t.id === context.teamId && t.competition === context.competition,
-    );
+    const team = teams.find((t) => t.id === context.teamId);
     if (!team) {
       await this.telegramBot.sendMessage(context.chatId, 'Команда не найдена.');
       return;
@@ -1039,7 +1054,7 @@ export class TelegramService implements OnApplicationBootstrap {
     });
 
     let message = '';
-    message += `📊 *Статистика команды*\n${federation.emoji} *${federation.name}*\n🏆 *${context.competition}*\n👥 *${team.name}*\n\n`;
+    message += `📊 *Статистика команды*\n${federation.emoji} *${federation.name}*\n🏆 *${competition.name}*\n👥 *${team.name}*\n\n`;
 
     for (const player of allPlayers) {
       message += this.formatPlayerInfo(player) + '\n';
@@ -1056,7 +1071,7 @@ export class TelegramService implements OnApplicationBootstrap {
                 chatId: context.chatId,
                 event: 'send_statistic_teams',
                 federationSlug: context.federationSlug,
-                competition: context.competition,
+                competitionId: context.competitionId,
               }),
             },
           ],

@@ -1,3 +1,4 @@
+import { ICompetition } from '../dataproject-api.service';
 import { MatchStatus } from '../enums';
 import { TeamInfo } from './team-info.interface';
 
@@ -6,6 +7,6 @@ export interface MatchInfo {
   status: MatchStatus;
   home: TeamInfo;
   guest: TeamInfo;
-  competition?: string;
+  competition?: ICompetition;
   matchDateTimeUtc: Date;
 }

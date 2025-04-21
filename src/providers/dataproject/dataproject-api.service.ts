@@ -19,7 +19,7 @@ import { PlayerPosition } from './enums';
 
 type RawMatch = {
   id: number;
-  competitionName: string;
+  competition: ICompetition;
   matchDateTimeUtc: Date;
 };
 
@@ -189,10 +189,8 @@ class DataprojectFederationClient {
     );
   }
 
-  protected async getAllTeams(): Promise<
-    Pick<TeamInfo, 'id' | 'name' | 'competition'>[]
-  > {
-    const allTeams: Pick<TeamInfo, 'id' | 'name' | 'competition'>[] = [];
+  protected async getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
+    const allTeams: Pick<TeamInfo, 'id' | 'name'>[] = [];
     const uniqueTeamIds = new Set<number>();
 
     try {
@@ -230,10 +228,10 @@ class DataprojectFederationClient {
 
   protected async getTeams(
     competitionId?: number,
-  ): Promise<Pick<TeamInfo, 'id' | 'name' | 'competition'>[]> {
+  ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
     //Logger.debug('getAllTeams');
     const url = `https://${this.federation.slug}-web.dataproject.com/CompetitionTeamSearch.aspx`;
-    type RawTeam = Pick<TeamInfo, 'id' | 'name' | 'competition'>;
+    type RawTeam = Pick<TeamInfo, 'id' | 'name'>;
     const teams: RawTeam[] = [];
     try {
       const params = competitionId ? { ID: competitionId } : {};
@@ -271,7 +269,6 @@ class DataprojectFederationClient {
         teams.push({
           id: teamId,
           name: teamName,
-          competition,
         });
       });
     } catch (e) {
@@ -327,7 +324,7 @@ class DataprojectFederationClient {
     }
   }
 
-  protected async getCompetitions(): Promise<ICompetition[]> {
+  public async getCompetitions(): Promise<ICompetition[]> {
     const { data } = await this.httpService.axiosRef.get(
       `https://${this.federation.slug}-web.dataproject.com/MainHome.aspx`,
       {},
@@ -347,7 +344,7 @@ class DataprojectFederationClient {
 
     const uniqueCompetitions = Array.from(
       new Map(rawCompetitions.map((comp) => [comp.id, comp])).values(),
-    );
+    ).filter((c) => this.federation.competitionIds.includes(c.id));
 
     const competitions: ICompetition[] = [];
     for (const { id } of uniqueCompetitions) {
@@ -358,7 +355,15 @@ class DataprojectFederationClient {
     return competitions;
   }
 
+  // protected async getCompetitions(): Promise<ICompetition[]> {
+  //   const competitions = await this.getAllCompetitions();
+  //   return competitions.filter((c) =>
+  //     this.federation.competitionIds.includes(c.id),
+  //   );
+  // }
+
   protected async getCompetitionById(id: number): Promise<ICompetition | null> {
+    if (!id) return null;
     const competitions = await this.getCompetitions();
     return competitions.find((c) => c.id === id);
   }
@@ -367,7 +372,7 @@ class DataprojectFederationClient {
     id: number,
   ): Promise<ICompetition | null> {
     const { data } = await this.httpService.axiosRef.get(
-      `https://hvf-web.dataproject.com/CompetitionHome.aspx`,
+      `https://${this.federation.slug}-web.dataproject.com/CompetitionHome.aspx`,
       {
         params: {
           ID: id,
@@ -377,8 +382,9 @@ class DataprojectFederationClient {
 
     const $ = cheerio.load(data);
 
-    const fullName = $('div#LYR_Menu h2').text().trim();
-    const name = $('div#LYR_CompetitionDescription h2').text().trim();
+    const name = $('div#LYR_Menu h2').text().trim();
+    const fullName = $('div#LYR_CompetitionDescription h2').text().trim();
+
     return {
       id,
       name,
@@ -387,30 +393,35 @@ class DataprojectFederationClient {
   }
 
   protected async getRawMatchs(): Promise<RawMatch[]> {
-    // Logger.debug('getRawMatchs');
-
     const url = `https://${this.federation.slug}-web.dataproject.com/MainLiveScore.aspx`;
     const matches: RawMatch[] = [];
 
     try {
       const response = await this.httpService.axiosRef.get(url, {
         headers: {
-          Cookie: 'timezoneoffset=0', // Для получения времени в UTC-0
+          Cookie: 'timezoneoffset=0',
         },
       });
+
       const $ = cheerio.load(response.data);
+      const matchElements = $('div.match-main-wrapper').toArray();
 
-      $('div.match-main-wrapper').each((_, element) => {
-        const competition = $(element)
-          .find('span[id^="Content_Main_RLV_MatchList_LBL_Competition"]')
-          .text()
-          .trim();
-
+      for (const element of matchElements) {
         const time = $(element)
           .find('span[id^="Content_Main_RLV_MatchList_LB_Ora_Today_"]')
           .text()
           .trim()
           .replace('.', ':');
+
+        const onclickAttr = $(element)
+          .find(
+            'div[id^="Content_Main_RLV_MatchList_DIV_MatchListLive_Result"]',
+          )
+          .attr('onclick');
+
+        const competitionId = onclickAttr?.match(/&ID=(\d+)/)?.[1]
+          ? parseInt(onclickAttr.match(/&ID=(\d+)/)![1], 10)
+          : null;
 
         const [utcHourStr, utcMinuteStr] = time.split(':');
         const utcHour = parseInt(utcHourStr, 10);
@@ -418,8 +429,9 @@ class DataprojectFederationClient {
 
         if (isNaN(utcHour) || isNaN(utcMinute)) {
           Logger.warn(`Невалидное время матча: "${time}"`);
-          return;
+          continue;
         }
+
         const matchDateTimeUtc = moment
           .utc()
           .set({ hour: utcHour, minute: utcMinute, second: 0, millisecond: 0 })
@@ -427,14 +439,17 @@ class DataprojectFederationClient {
 
         const matchId = $(element).attr('id')?.split('Match_Main_')[1]?.trim();
 
-        if (matchId && competition) {
+        if (!matchId || !competitionId) continue;
+
+        const competition = await this.getCompetitionById(competitionId);
+        if (competition) {
           matches.push({
             id: +matchId,
-            competitionName: competition,
+            competition,
             matchDateTimeUtc,
           });
         }
-      });
+      }
     } catch (e) {
       Logger.error('Error fetching live matches:', e);
     }
@@ -447,11 +462,11 @@ class DataprojectFederationClient {
 
     const connectionToken = await this.ensureConnectionToken();
     const matchIds = rawMatches.map((m) => m.id);
-    const competitionMap = new Map(
+    const teamsMap = new Map(
       rawMatches.map((m) => [
         m.id,
         {
-          competition: m.competitionName,
+          competition: m.competition,
           matchDateTimeUtc: m.matchDateTimeUtc,
         },
       ]),
@@ -506,8 +521,7 @@ class DataprojectFederationClient {
         const match: MatchInfo = {
           id: r.ChampionshipMatchID,
           status: r.Status,
-          matchDateTimeUtc:
-            competitionMap.get(id)?.matchDateTimeUtc ?? new Date(),
+          matchDateTimeUtc: teamsMap.get(id)?.matchDateTimeUtc ?? new Date(),
 
           home: {
             id: r.Home,
@@ -516,7 +530,6 @@ class DataprojectFederationClient {
               r.ChampionshipMatchID,
               r.Home,
             ),
-            competition: competitionMap.get(id)?.competition,
           },
           guest: {
             id: r.Guest,
@@ -525,9 +538,8 @@ class DataprojectFederationClient {
               r.ChampionshipMatchID,
               r.Guest,
             ),
-            competition: competitionMap.get(id)?.competition,
           },
-          competition: competitionMap.get(id)?.competition,
+          competition: teamsMap.get(id)?.competition,
         };
 
         return match;
@@ -860,15 +872,13 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
 
   public override getTeams(
     competitionId: number,
-  ): Promise<Pick<TeamInfo, 'id' | 'name' | 'competition'>[]> {
+  ): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
     const key = `federation:${this.federation.slug}:teams:${competitionId}`;
     return this.getOrSetCache(key, () => super.getTeams(competitionId));
     // return super.getTeams(competitionId);
   }
 
-  public override getAllTeams(): Promise<
-    Pick<TeamInfo, 'id' | 'name' | 'competition'>[]
-  > {
+  public override getAllTeams(): Promise<Pick<TeamInfo, 'id' | 'name'>[]> {
     const key = `federation:${this.federation.slug}:allTeams`;
     return this.getOrSetCache(key, () => super.getAllTeams());
     // return super.getAllTeams();
@@ -936,14 +946,14 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
 }
 
 @Injectable()
-export class DataprojectApiService implements OnApplicationBootstrap {
+export class DataprojectApiService {
   private clients: Map<string, DataprojectFederationCacheClient> = new Map();
 
   constructor(private readonly httpService: HttpService) {}
-  async onApplicationBootstrap() {
-    const competitions = await this.getClient('cvf').getCompetitions();
-    console.log(competitions);
-  }
+  // async onApplicationBootstrap() {
+  //   const competitions = await this.getClient('cvf').getCompetitions();
+  //   console.log(competitions);
+  // }
 
   getClient(federation: FederationInfo): DataprojectFederationCacheClient;
   getClient(federationSlug: FederationSlug): DataprojectFederationCacheClient;
