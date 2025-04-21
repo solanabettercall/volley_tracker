@@ -16,7 +16,6 @@ import { PlayerInfo } from './interfaces/player-info.interface';
 import { federations, FederationInfo, FederationSlug } from './types';
 import { TeamInfo } from './interfaces/team-info.interface';
 import { PlayerPosition } from './enums';
-import e from 'express';
 
 type RawMatch = {
   id: number;
@@ -34,6 +33,7 @@ interface IPlayerStatistic {
 
 export interface ICompetition {
   id: number;
+  fullName: string;
   name: string;
 }
 
@@ -335,7 +335,9 @@ class DataprojectFederationClient {
 
     const $ = cheerio.load(data);
 
-    const competitions: ICompetition[] = $('li a[id^="C_"]')
+    const rawCompetitions: Pick<ICompetition, 'id' | 'name'>[] = $(
+      'li a[id^="C_"]',
+    )
       .map((_, el) => {
         const id = parseInt($(el).attr('id').replace('C_', ''), 10);
         const name = $(el).text().trim();
@@ -344,15 +346,44 @@ class DataprojectFederationClient {
       .toArray();
 
     const uniqueCompetitions = Array.from(
-      new Map(competitions.map((comp) => [comp.id, comp])).values(),
+      new Map(rawCompetitions.map((comp) => [comp.id, comp])).values(),
     );
 
-    return uniqueCompetitions;
+    const competitions: ICompetition[] = [];
+    for (const { id } of uniqueCompetitions) {
+      const competition = await this.getFullCompetitionById(id);
+      competitions.push(competition);
+    }
+
+    return competitions;
   }
 
   protected async getCompetitionById(id: number): Promise<ICompetition | null> {
     const competitions = await this.getCompetitions();
     return competitions.find((c) => c.id === id);
+  }
+
+  private async getFullCompetitionById(
+    id: number,
+  ): Promise<ICompetition | null> {
+    const { data } = await this.httpService.axiosRef.get(
+      `https://hvf-web.dataproject.com/CompetitionHome.aspx`,
+      {
+        params: {
+          ID: id,
+        },
+      },
+    );
+
+    const $ = cheerio.load(data);
+
+    const fullName = $('div#LYR_Menu h2').text().trim();
+    const name = $('div#LYR_CompetitionDescription h2').text().trim();
+    return {
+      id,
+      name,
+      fullName,
+    };
   }
 
   protected async getRawMatchs(): Promise<RawMatch[]> {
@@ -889,13 +920,17 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
 
   public override async getCompetitions(): Promise<ICompetition[]> {
     const key = `federation:${this.federation.slug}:competitions`;
-    return this.getOrSetCache(key, () => super.getCompetitions(), 3600);
+    return this.getOrSetCache(key, () => super.getCompetitions(), 3600 * 12);
     // return super.getCompetitions();
   }
 
   public override async getCompetitionById(id: number): Promise<ICompetition> {
     const key = `federation:${this.federation.slug}:competition:${id}`;
-    return this.getOrSetCache(key, () => super.getCompetitionById(id), 3600);
+    return this.getOrSetCache(
+      key,
+      () => super.getCompetitionById(id),
+      3600 * 12,
+    );
     // return super.getCompetitionById(id);
   }
 }
