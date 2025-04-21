@@ -1,5 +1,11 @@
 import { HttpService } from '@nestjs/axios';
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleInit,
+} from '@nestjs/common';
 import * as moment from 'moment';
 import * as cheerio from 'cheerio';
 import { AxiosRequestConfig } from 'axios';
@@ -10,6 +16,7 @@ import { PlayerInfo } from './interfaces/player-info.interface';
 import { federations, FederationInfo, FederationSlug } from './types';
 import { TeamInfo } from './interfaces/team-info.interface';
 import { PlayerPosition } from './enums';
+import e from 'express';
 
 type RawMatch = {
   id: number;
@@ -23,6 +30,11 @@ interface IPlayerStatistic {
   playedSetsCount: number;
   teamId: number;
   competitionId: number;
+}
+
+export interface ICompetition {
+  id: number;
+  name: string;
 }
 
 export class PlayerStatistic implements IPlayerStatistic {
@@ -313,6 +325,34 @@ class DataprojectFederationClient {
     } catch (error) {
       Logger.error('Ошибка при получении токена:', error);
     }
+  }
+
+  protected async getCompetitions(): Promise<ICompetition[]> {
+    const { data } = await this.httpService.axiosRef.get(
+      `https://${this.federation.slug}-web.dataproject.com/MainHome.aspx`,
+      {},
+    );
+
+    const $ = cheerio.load(data);
+
+    const competitions: ICompetition[] = $('li a[id^="C_"]')
+      .map((_, el) => {
+        const id = parseInt($(el).attr('id').replace('C_', ''), 10);
+        const name = $(el).text().trim();
+        return { id, name };
+      })
+      .toArray();
+
+    const uniqueCompetitions = Array.from(
+      new Map(competitions.map((comp) => [comp.id, comp])).values(),
+    );
+
+    return uniqueCompetitions;
+  }
+
+  protected async getCompetitionById(id: number): Promise<ICompetition | null> {
+    const competitions = await this.getCompetitions();
+    return competitions.find((c) => c.id === id);
   }
 
   protected async getRawMatchs(): Promise<RawMatch[]> {
@@ -846,13 +886,29 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
 
     // return super.getPlayerStatistic(playerId, teamId);
   }
+
+  public override async getCompetitions(): Promise<ICompetition[]> {
+    const key = `federation:${this.federation.slug}:competitions`;
+    return this.getOrSetCache(key, () => super.getCompetitions(), 3600);
+    // return super.getCompetitions();
+  }
+
+  public override async getCompetitionById(id: number): Promise<ICompetition> {
+    const key = `federation:${this.federation.slug}:competition:${id}`;
+    return this.getOrSetCache(key, () => super.getCompetitionById(id), 3600);
+    // return super.getCompetitionById(id);
+  }
 }
 
 @Injectable()
-export class DataprojectApiService {
+export class DataprojectApiService implements OnApplicationBootstrap {
   private clients: Map<string, DataprojectFederationCacheClient> = new Map();
 
   constructor(private readonly httpService: HttpService) {}
+  async onApplicationBootstrap() {
+    const competitions = await this.getClient('cvf').getCompetitions();
+    console.log(competitions);
+  }
 
   getClient(federation: FederationInfo): DataprojectFederationCacheClient;
   getClient(federationSlug: FederationSlug): DataprojectFederationCacheClient;
