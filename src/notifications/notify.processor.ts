@@ -146,7 +146,7 @@ export class NotifyProcessor {
 
       const key = `notify:${job.id}`;
       await this.telegramService.sendMessage(event.userId, message);
-      await this.redis.set(key, job.id, 'EX', 60 * 60 * 24);
+      await this.redis.set(key, job.id);
     } catch (error) {
       Logger.error('Error processing notification:', error);
       throw error;
