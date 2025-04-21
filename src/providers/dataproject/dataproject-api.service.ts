@@ -359,7 +359,6 @@ class DataprojectFederationClient {
         })
         .toArray();
     }
-    console.log(rawCompetitions);
 
     const uniqueCompetitions = Array.from(
       new Map(rawCompetitions.map((comp) => [comp.id, comp])).values(),

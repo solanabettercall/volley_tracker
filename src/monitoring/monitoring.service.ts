@@ -69,13 +69,8 @@ export class MonitoringService implements OnApplicationBootstrap {
   ): Promise<number[]> {
     const query: any = { userId, federationSlug };
 
-    const teams = await this.monitoredTeamModel
-      .find(query)
-      // .lean()
-      .exec();
-    for (const team of teams) {
-      console.log(team);
-    }
+    const teams = await this.monitoredTeamModel.find(query).exec();
+
     const uniqueIds = Array.from(new Set(teams.map((t) => t.competitionId)));
 
     return uniqueIds;
