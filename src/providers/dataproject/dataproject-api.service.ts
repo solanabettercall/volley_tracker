@@ -947,19 +947,19 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   }
 
   public override async getCompetitions(): Promise<ICompetition[]> {
-    // const key = `federation:${this.federation.slug}:competitions`;
-    // return this.getOrSetCache(key, () => super.getCompetitions(), 3600 * 12);
-    return super.getCompetitions();
+    const key = `federation:${this.federation.slug}:competitions`;
+    return this.getOrSetCache(key, () => super.getCompetitions(), 3600 * 12);
+    // return super.getCompetitions();
   }
 
   public override async getCompetitionById(id: number): Promise<ICompetition> {
-    // const key = `federation:${this.federation.slug}:competition:${id}`;
-    // return this.getOrSetCache(
-    //   key,
-    //   () => super.getCompetitionById(id),
-    //   3600 * 12,
-    // );
-    return super.getCompetitionById(id);
+    const key = `federation:${this.federation.slug}:competition:${id}`;
+    return this.getOrSetCache(
+      key,
+      () => super.getCompetitionById(id),
+      3600 * 12,
+    );
+    // return super.getCompetitionById(id);
   }
 }
 

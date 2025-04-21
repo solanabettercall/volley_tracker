@@ -675,23 +675,6 @@ export class TelegramService implements OnApplicationBootstrap {
         context.federationSlug,
       );
 
-    console.log(monitoredCompetitionIds);
-
-    // const monitoredCompetitionIds = monitoredRawTeams.flatMap(
-    //   (f) => f.competitionId,
-    // );
-    // const uniqMonitoredCompetitionIds = Array.from(
-    //   new Set<number>(monitoredCompetitionIds),
-    // );
-
-    // const competitions = [];
-    // for(const competitionId of uniqMonitoredCompetitionIds){
-    //   const competition = await this.dataprojectApiService
-    //     .getClient(context.federationSlug)
-    //     .getCompetitions();
-    //   competitions.push
-    // }
-
     const allCompetitions = await this.dataprojectApiService
       .getClient(context.federationSlug)
       .getCompetitions();
@@ -699,17 +682,6 @@ export class TelegramService implements OnApplicationBootstrap {
     const monitoredCompetitions = allCompetitions.filter((c) =>
       monitoredCompetitionIds.includes(c.id),
     );
-    // const teams = await this.dataprojectApiService
-    //   .getClient(context.federationSlug)
-    //   .getAllTeams();
-
-    // const monitoredTeams = teams.filter((t) =>
-    //   monitoredTeamIds.some((id) => id === t.id),
-    // );
-
-    // const uniqMonitoredCompetitions = Array.from(
-    //   new Set<string>(monitoredTeams.map((t) => t.competition)),
-    // );
 
     const keyboard = [];
 
