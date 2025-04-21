@@ -92,7 +92,7 @@ export class MonitoringProcessor {
       const matches = await client.getMatchesInfo();
 
       const oneHourBefore = moment.utc().subtract(1, 'hour');
-      const oneHourLater = moment.utc().add(2, 'hour');
+      const oneHourLater = moment.utc().add(1, 'hour');
 
       const upcomingMatches = matches.filter(
         (match) =>
