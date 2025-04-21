@@ -12,6 +12,8 @@ import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.int
 import { createHash } from 'crypto';
 import * as moment from 'moment';
 import * as stringify from 'json-stable-stringify';
+import { appConfig } from 'src/config';
+import Redis from 'ioredis';
 
 interface TeamEventData {
   team: TeamInfo;
@@ -47,6 +49,11 @@ export class MonitoringProcessor {
     @InjectQueue(NOTIFY_QUEUE)
     private readonly notifyQueue: Queue,
   ) {}
+
+  private readonly redis = new Redis({
+    host: appConfig.redis.host,
+    port: appConfig.redis.port,
+  });
 
   private hashEvent(event: LineupEvent | SubstitutionEvent): string {
     // const normalizePlayers = (players: PlayerInfo[]) =>
@@ -85,7 +92,7 @@ export class MonitoringProcessor {
       const matches = await client.getMatchesInfo();
 
       const oneHourBefore = moment.utc().subtract(1, 'hour');
-      const oneHourLater = moment.utc().add(1, 'hour');
+      const oneHourLater = moment.utc().add(2, 'hour');
 
       const upcomingMatches = matches.filter(
         (match) =>
@@ -110,13 +117,13 @@ export class MonitoringProcessor {
         for (const player of match.home.players) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id);
+            .getPlayerStatistic(player.id, match.home.id, match.competition.id);
         }
 
         for (const player of match.guest.players) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id);
+            .getPlayerStatistic(player.id, match.home.id, match.competition.id);
         }
 
         const usersMonitoringMatch = new Set<number>();
@@ -133,20 +140,24 @@ export class MonitoringProcessor {
         if (usersMonitoringMatch.size === 0) continue;
 
         const [homeTeamPlayers, guestTeamPlayers] = await Promise.all([
-          client.getTeamRoster(homeTeamId),
-          client.getTeamRoster(guestTeamId),
+          client.getTeamRoster(homeTeamId, match.competition?.id),
+          client.getTeamRoster(guestTeamId, match.competition?.id),
         ]);
 
         for (const player of homeTeamPlayers) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id);
+            .getPlayerStatistic(player.id, match.home.id, match.competition.id);
         }
 
         for (const player of guestTeamPlayers) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.guest.id);
+            .getPlayerStatistic(
+              player.id,
+              match.guest.id,
+              match.competition.id,
+            );
         }
 
         const homeTeamData = {
@@ -201,11 +212,15 @@ export class MonitoringProcessor {
             };
             const lineupHash = this.hashEvent(lineupEvent);
 
-            await this.notifyQueue.add('notify', lineupEvent, {
-              jobId: lineupHash,
-              removeOnComplete: false,
-              removeOnFail: true,
-            });
+            const key = `notify:${lineupHash}`;
+            const notifyExist = await this.redis.get(key);
+            if (!notifyExist) {
+              await this.notifyQueue.add('notify', lineupEvent, {
+                jobId: lineupHash,
+                removeOnComplete: false,
+                removeOnFail: true,
+              });
+            }
           }
 
           if (
@@ -217,12 +232,16 @@ export class MonitoringProcessor {
               ...commonEventFields,
             };
             const substitutionHash = this.hashEvent(substitutionEvent);
+            const key = `notify:${substitutionHash}`;
 
-            await this.notifyQueue.add('notify', substitutionEvent, {
-              jobId: substitutionHash,
-              removeOnComplete: false,
-              removeOnFail: true,
-            });
+            const notifyExist = await this.redis.get(key);
+            if (!notifyExist) {
+              await this.notifyQueue.add('notify', substitutionEvent, {
+                jobId: substitutionHash,
+                removeOnComplete: false,
+                removeOnFail: true,
+              });
+            }
           }
         }
       }

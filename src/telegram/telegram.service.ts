@@ -4,10 +4,8 @@ import { appConfig } from 'src/config';
 import { DataprojectApiService } from 'src/providers/dataproject/dataproject-api.service';
 import { federations, FederationSlug } from 'src/providers/dataproject/types';
 
-import { MonitoredTeam } from '../schemas/monitoring.schema';
 import { MonitoringService } from 'src/monitoring/monitoring.service';
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
-import { TeamInfo } from 'src/providers/dataproject/interfaces/team-info.interface';
 import Redis from 'ioredis';
 import * as stringify from 'json-stable-stringify';
 import { createHash } from 'crypto';
@@ -84,6 +82,7 @@ export class TelegramService implements OnApplicationBootstrap {
       if (!msg || !contextHash || !context) {
         await this.sendMainMenu(callbackQuery.from.id);
         await this.telegramBot.answerCallbackQuery(callbackQuery.id);
+        return;
       }
 
       this.logger.verbose(context);
@@ -243,7 +242,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     const players = await this.dataprojectApiService
       .getClient(context.federationSlug)
-      .getTeamRoster(context.teamId);
+      .getTeamRoster(context.teamId, context.competitionId);
 
     const updatedPlayerIds = await this.monitoringService.getPlayersForTeam(
       context.chatId,
@@ -255,7 +254,7 @@ export class TelegramService implements OnApplicationBootstrap {
     for (const player of players) {
       keyboard.push([
         {
-          text: `${updatedPlayerIds.includes(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
+          text: `${updatedPlayerIds.includes(player.id) ? '✅' : '❌'} #${player.number ?? 0} ${player.fullName}`,
           callback_data: await this.storeCallbackContext({
             event: 'toggle_player',
             chatId: context.chatId,
@@ -478,7 +477,7 @@ export class TelegramService implements OnApplicationBootstrap {
   private async sendPlayers(context: ICallbackContext) {
     const players = await this.dataprojectApiService
       .getClient(context.federationSlug)
-      .getTeamRoster(context.teamId);
+      .getTeamRoster(context.teamId, context.competitionId);
 
     const competition = await this.dataprojectApiService
       .getClient(context.federationSlug)
@@ -528,7 +527,7 @@ export class TelegramService implements OnApplicationBootstrap {
     for (const player of players) {
       keyboard.push([
         {
-          text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number} ${player.fullName}`,
+          text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number ?? 0} ${player.fullName}`,
           callback_data: await this.storeCallbackContext({
             event: 'toggle_player',
             chatId: context.chatId,
@@ -745,7 +744,7 @@ export class TelegramService implements OnApplicationBootstrap {
       const team = allTeams.find((t) => t.id === teamId);
       if (!team) continue;
 
-      const players = await client.getTeamRoster(teamId);
+      const players = await client.getTeamRoster(teamId, context.competitionId);
 
       const liveMatch = matches
         .flatMap((m) => [m.home, m.guest])
@@ -758,7 +757,11 @@ export class TelegramService implements OnApplicationBootstrap {
 
       for (const player of allPlayers) {
         if (!player.statistic) {
-          const stat = await client.getPlayerStatistic(player.id, team.id);
+          const stat = await client.getPlayerStatistic(
+            player.id,
+            team.id,
+            context.competitionId,
+          );
           if (stat) player.statistic = stat;
         }
       }
@@ -1002,7 +1005,10 @@ export class TelegramService implements OnApplicationBootstrap {
       return;
     }
 
-    const rosterPlayers = await client.getTeamRoster(team.id);
+    const rosterPlayers = await client.getTeamRoster(
+      team.id,
+      context.competitionId,
+    );
 
     const liveMatch = matches
       .flatMap((m) => [m.home, m.guest])
@@ -1012,7 +1018,11 @@ export class TelegramService implements OnApplicationBootstrap {
 
     for (const player of allPlayers) {
       if (!player.statistic) {
-        const stat = await client.getPlayerStatistic(player.id, team.id);
+        const stat = await client.getPlayerStatistic(
+          player.id,
+          team.id,
+          context.competitionId,
+        );
         if (stat) player.statistic = stat;
       }
     }

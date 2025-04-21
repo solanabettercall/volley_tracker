@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   OnApplicationBootstrap,
   OnModuleInit,
@@ -480,6 +481,7 @@ class DataprojectFederationClient {
 
     const connectionToken = await this.ensureConnectionToken();
     const matchIds = rawMatches.map((m) => m.id);
+
     const teamsMap = new Map(
       rawMatches.map((m) => [
         m.id,
@@ -547,6 +549,7 @@ class DataprojectFederationClient {
             players: await this.getTeamPlayersFromMatch(
               r.ChampionshipMatchID,
               r.Home,
+              teamsMap.get(id).competition.id,
             ),
           },
           guest: {
@@ -555,9 +558,10 @@ class DataprojectFederationClient {
             players: await this.getTeamPlayersFromMatch(
               r.ChampionshipMatchID,
               r.Guest,
+              teamsMap.get(id).competition.id,
             ),
           },
-          competition: teamsMap.get(id)?.competition,
+          competition: teamsMap.get(id).competition,
         };
 
         return match;
@@ -602,6 +606,7 @@ class DataprojectFederationClient {
   protected async getTeamPlayersFromMatch(
     matchId: number,
     teamId: number,
+    competitionId: number,
   ): Promise<PlayerInfo[]> {
     // Logger.debug('getTeamPlayersFromMatch');
 
@@ -639,7 +644,10 @@ class DataprojectFederationClient {
       I: string;
     }>(config);
 
-    const teamRoster: PlayerInfo[] = await this.getTeamRoster(teamId);
+    const teamRoster: PlayerInfo[] = await this.getTeamRoster(
+      teamId,
+      competitionId,
+    );
 
     const players: PlayerInfo[] = data.R.map((r) => {
       const basePlayer = {
@@ -682,10 +690,10 @@ class DataprojectFederationClient {
     }
   }
 
-  protected async getTeamRoster(teamId: number) {
+  protected async getTeamRoster(teamId: number, competitionId: number) {
     // Logger.debug('getTeamRoster');
 
-    const url = `https://${this.federation.slug}-web.dataproject.com/CompetitionTeamDetails.aspx?TeamID=${teamId}`;
+    const url = `https://${this.federation.slug}-web.dataproject.com/CompetitionTeamDetails.aspx`;
     const headers = {
       Host: `${this.federation.slug}-web.dataproject.com`,
       'User-Agent':
@@ -704,6 +712,10 @@ class DataprojectFederationClient {
     try {
       const { data: html } = await this.httpService.axiosRef.get(url, {
         headers,
+        params: {
+          ID: competitionId,
+          TeamID: teamId,
+        },
       });
       const $ = cheerio.load(html);
       const rosterDiv = $('#Content_Main_RPL_Roster');
@@ -798,7 +810,7 @@ class DataprojectFederationClient {
       I: string;
     }>(config);
 
-    return data.R.map((R) => ({
+    return data.R.filter((d) => d.PN || d.PID).map((R) => ({
       id: R.PID,
       number: R.PN,
       isHome: R.HG,
@@ -808,8 +820,9 @@ class DataprojectFederationClient {
   protected async getPlayerStatistic(
     playerId: number,
     teamId: number,
+    competitionId: number,
   ): Promise<PlayerStatistic | null> {
-    const allStats = await this.getPlayersStatistic();
+    const allStats = await this.getPlayersStatisticByCompetition(competitionId);
 
     let matchingStats = allStats.filter(
       (stat) => stat.id === playerId && stat.teamId === teamId,
@@ -873,19 +886,25 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   protected override getTeamPlayersFromMatch(
     matchId: number,
     teamId: number,
+    competitionId: number,
   ): Promise<PlayerInfo[]> {
-    const key = `federation:${this.federation.slug}:playersFromMatch:${matchId}:${teamId}`;
+    const key = `federation:${this.federation.slug}:playersFromMatch:${competitionId}:${matchId}:${teamId}`;
     return this.getOrSetCache(
       key,
-      () => super.getTeamPlayersFromMatch(matchId, teamId),
+      () => super.getTeamPlayersFromMatch(matchId, teamId, competitionId),
       10,
     );
   }
 
-  public override getTeamRoster(teamId: number): Promise<PlayerInfo[]> {
-    const key = `federation:${this.federation.slug}:teamRoster:${teamId}`;
-    return this.getOrSetCache(key, () => super.getTeamRoster(teamId));
-    // return super.getTeamRoster(teamId);
+  public override getTeamRoster(
+    teamId: number,
+    competitionId: number,
+  ): Promise<PlayerInfo[]> {
+    const key = `federation:${this.federation.slug}:${competitionId}:teamRoster:${teamId}`;
+    return this.getOrSetCache(key, () =>
+      super.getTeamRoster(teamId, competitionId),
+    );
+    // return super.getTeamRoster(teamId, competitionId);
   }
 
   public override getTeams(
@@ -929,11 +948,12 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   public override async getPlayerStatistic(
     playerId: number,
     teamId: number,
+    competitionId: number,
   ): Promise<PlayerStatistic | null> {
-    const key = `federation:${this.federation.slug}:team:${teamId}:playerStatistic:${playerId}`;
+    const key = `federation:${this.federation.slug}:${competitionId}:team:${teamId}:playerStatistic:${playerId}`;
     const result = await this.getOrSetCache(
       key,
-      () => super.getPlayerStatistic(playerId, teamId),
+      () => super.getPlayerStatistic(playerId, teamId, competitionId),
       3600,
     );
 

@@ -9,13 +9,19 @@ import { NOTIFY_QUEUE } from './notify.const';
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
 import { Logger } from '@nestjs/common';
 import * as moment from 'moment';
-import { PlayerStatistic } from 'src/providers/dataproject/dataproject-api.service';
+import Redis from 'ioredis';
+import { appConfig } from 'src/config';
 
 export type NotificationEvent = LineupEvent | SubstitutionEvent;
 
 @Processor(NOTIFY_QUEUE)
 export class NotifyProcessor {
   constructor(private readonly telegramService: TelegramService) {}
+
+  private readonly redis = new Redis({
+    host: appConfig.redis.host,
+    port: appConfig.redis.port,
+  });
 
   private formatPlayersList(players: PlayerInfo[], symbol: string): string {
     return players
@@ -58,8 +64,15 @@ export class NotifyProcessor {
     missing: PlayerInfo[],
     inactive: PlayerInfo[],
     all: PlayerInfo[],
+    teamName: string,
+    isHome: boolean,
   ): string {
+    if (!missing.length && !inactive.length) {
+      return '\n';
+    }
     const parts: string[] = [];
+    // `🔴 *${home.team.name.toUpperCase()}:*`,
+    parts.push(`\n${isHome ? '🔴' : '🔵'} *${teamName.toUpperCase()}:*`);
     if (missing.length)
       parts.push(`❌ *Не заявлены:*\n${this.formatPlayersList(missing, '⚪️')}`);
     if (inactive.length)
@@ -81,7 +94,7 @@ export class NotifyProcessor {
   private formatNotification(event: NotificationEvent): string {
     const { match, federation, matchDateTimeUtc, type, home, guest } = event;
 
-    const competition = match.competition || 'Неизвестный турнир';
+    const competition = match.competition.name || 'Неизвестный турнир';
     const titleEmoji = type === 'lineup' ? '📋' : '🔄';
     const titleText = type === 'lineup' ? 'ИЗМЕНЕНИЕ СОСТАВА' : 'ЗАМЕНА';
     const matchLink = `https://${federation.slug}-web.dataproject.com/LiveScore_adv.aspx?ID=${match.id}`;
@@ -91,24 +104,28 @@ export class NotifyProcessor {
       federation?.emoji ? `${federation.emoji} ${federation.name}` : '',
       `🏆 ${competition}`,
       `📅 ${this.formatMatchDateTime(matchDateTimeUtc)}`,
-      `\n🏐 *${home.team.name.toUpperCase()}* vs *${guest.team.name.toUpperCase()}*\n`,
+      `\n🏐 *${home.team.name.toUpperCase()}* vs *${guest.team.name.toUpperCase()}*`,
     ]
       .filter(Boolean)
       .join('\n');
 
     return [
       header,
-      `🔴 *${home.team.name.toUpperCase()}:*`,
+      // `🔴 *${home.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         home.missingPlayers,
         home.inactivePlayers,
         home.team.players,
+        home.team.name,
+        true,
       ),
-      `\n🔵 *${guest.team.name.toUpperCase()}:*`,
+      // `\n🔵 *${guest.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         guest.missingPlayers,
         guest.inactivePlayers,
         guest.team.players,
+        guest.team.name,
+        false,
       ),
       `\n🔗 [Подробнее](${matchLink})`,
     ]
@@ -126,7 +143,9 @@ export class NotifyProcessor {
 
       const message = this.formatNotification(event);
 
+      const key = `notify:${job.id}`;
       await this.telegramService.sendMessage(event.userId, message);
+      await this.redis.set(key, job.id, 'EX', 60 * 60 * 24);
     } catch (error) {
       Logger.error('Error processing notification:', error);
       throw error;
