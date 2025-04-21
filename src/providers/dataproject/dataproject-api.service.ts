@@ -332,7 +332,7 @@ class DataprojectFederationClient {
 
     const $ = cheerio.load(data);
 
-    const rawCompetitions: Pick<ICompetition, 'id' | 'name'>[] = $(
+    let rawCompetitions: Pick<ICompetition, 'id' | 'name'>[] = $(
       'li a[id^="C_"]',
     )
       .map((_, el) => {
@@ -341,6 +341,25 @@ class DataprojectFederationClient {
         return { id, name };
       })
       .toArray();
+
+    if (!rawCompetitions.length) {
+      rawCompetitions = $(
+        'input[id^="Content_Main_RP_Competitions_HF_CompetitionID"]',
+      )
+        .map((_, el) => {
+          const id = parseInt($(el).attr('value').trim());
+          const name = $(el)
+            .parent()
+            .find(
+              'span[id^="Content_Main_RP_Competitions_LBL_CompetitionDescription"]',
+            )
+            .text()
+            .trim();
+          return { id, name };
+        })
+        .toArray();
+    }
+    console.log(rawCompetitions);
 
     const uniqueCompetitions = Array.from(
       new Map(rawCompetitions.map((comp) => [comp.id, comp])).values(),
@@ -929,19 +948,19 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   }
 
   public override async getCompetitions(): Promise<ICompetition[]> {
-    const key = `federation:${this.federation.slug}:competitions`;
-    return this.getOrSetCache(key, () => super.getCompetitions(), 3600 * 12);
-    // return super.getCompetitions();
+    // const key = `federation:${this.federation.slug}:competitions`;
+    // return this.getOrSetCache(key, () => super.getCompetitions(), 3600 * 12);
+    return super.getCompetitions();
   }
 
   public override async getCompetitionById(id: number): Promise<ICompetition> {
-    const key = `federation:${this.federation.slug}:competition:${id}`;
-    return this.getOrSetCache(
-      key,
-      () => super.getCompetitionById(id),
-      3600 * 12,
-    );
-    // return super.getCompetitionById(id);
+    // const key = `federation:${this.federation.slug}:competition:${id}`;
+    // return this.getOrSetCache(
+    //   key,
+    //   () => super.getCompetitionById(id),
+    //   3600 * 12,
+    // );
+    return super.getCompetitionById(id);
   }
 }
 
