@@ -12,6 +12,9 @@ import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.int
 import { createHash } from 'crypto';
 import * as moment from 'moment';
 import * as stringify from 'json-stable-stringify';
+import { appConfig } from 'src/config';
+import Redis from 'ioredis';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 interface TeamEventData {
   team: TeamInfo;
@@ -48,21 +51,13 @@ export class MonitoringProcessor {
     private readonly notifyQueue: Queue,
   ) {}
 
-  private hashEvent(event: LineupEvent | SubstitutionEvent): string {
-    // const normalizePlayers = (players: PlayerInfo[]) =>
-    //   players.map((p) => p.id).sort((a, b) => a - b);
+  private readonly redis = new Redis({
+    host: appConfig.redis.host,
+    port: appConfig.redis.port,
+  });
 
+  private hashEvent(event: LineupEvent | SubstitutionEvent): string {
     const normalized = {
-      // home: {
-      //   missingPlayerIds: normalizePlayers(event.home.missingPlayers),
-      //   inactivePlayerIds: normalizePlayers(event.home.inactivePlayers),
-      //   teamId: event.home.team.id,
-      // },
-      // guest: {
-      //   missingPlayerIds: normalizePlayers(event.guest.missingPlayers),
-      //   inactivePlayerIds: normalizePlayers(event.guest.inactivePlayers),
-      //   teamId: event.guest.team.id,
-      // },
       matchId: event.match.id,
       federationSlug: event.federation.slug,
       userId: event.userId,
@@ -110,13 +105,13 @@ export class MonitoringProcessor {
         for (const player of match.home.players) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id);
+            .getPlayerStatistic(player.id, match.home.id, match.competition.id);
         }
 
         for (const player of match.guest.players) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id);
+            .getPlayerStatistic(player.id, match.home.id, match.competition.id);
         }
 
         const usersMonitoringMatch = new Set<number>();
@@ -133,20 +128,24 @@ export class MonitoringProcessor {
         if (usersMonitoringMatch.size === 0) continue;
 
         const [homeTeamPlayers, guestTeamPlayers] = await Promise.all([
-          client.getTeamRoster(homeTeamId),
-          client.getTeamRoster(guestTeamId),
+          client.getTeamRoster(homeTeamId, match.competition.id),
+          client.getTeamRoster(guestTeamId, match.competition.id),
         ]);
 
         for (const player of homeTeamPlayers) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id);
+            .getPlayerStatistic(player.id, match.home.id, match.competition.id);
         }
 
         for (const player of guestTeamPlayers) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.guest.id);
+            .getPlayerStatistic(
+              player.id,
+              match.guest.id,
+              match.competition.id,
+            );
         }
 
         const homeTeamData = {
@@ -201,11 +200,15 @@ export class MonitoringProcessor {
             };
             const lineupHash = this.hashEvent(lineupEvent);
 
-            await this.notifyQueue.add('notify', lineupEvent, {
-              jobId: lineupHash,
-              removeOnComplete: false,
-              removeOnFail: true,
-            });
+            const key = `notify:${lineupHash}`;
+            const notifyExist = await this.redis.get(key);
+            if (!notifyExist) {
+              await this.notifyQueue.add('notify', lineupEvent, {
+                jobId: lineupHash,
+                removeOnComplete: false,
+                removeOnFail: true,
+              });
+            }
           }
 
           if (
@@ -217,17 +220,31 @@ export class MonitoringProcessor {
               ...commonEventFields,
             };
             const substitutionHash = this.hashEvent(substitutionEvent);
+            const key = `notify:${substitutionHash}`;
 
-            await this.notifyQueue.add('notify', substitutionEvent, {
-              jobId: substitutionHash,
-              removeOnComplete: false,
-              removeOnFail: true,
-            });
+            const notifyExist = await this.redis.get(key);
+            if (!notifyExist) {
+              await this.notifyQueue.add('notify', substitutionEvent, {
+                jobId: substitutionHash,
+                removeOnComplete: false,
+                removeOnFail: true,
+              });
+            }
           }
         }
       }
     } catch (err) {
       Logger.error(`Ошибка при обработке ${federation.slug}: ${err.message}`);
+    }
+  }
+
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleQueueStatus() {
+    const queues = [{ name: 'notify-queue', queue: this.notifyQueue }];
+
+    for (const { name, queue } of queues) {
+      const counts = await queue.getJobCounts();
+      Logger.verbose(counts, name);
     }
   }
 

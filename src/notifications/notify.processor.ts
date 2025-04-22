@@ -1,4 +1,10 @@
-import { Process, Processor } from '@nestjs/bull';
+import {
+  OnQueueActive,
+  OnQueueCompleted,
+  OnQueueFailed,
+  Process,
+  Processor,
+} from '@nestjs/bull';
 import { Job } from 'bull';
 import { TelegramService } from '../telegram/telegram.service';
 import {
@@ -9,13 +15,19 @@ import { NOTIFY_QUEUE } from './notify.const';
 import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.interface';
 import { Logger } from '@nestjs/common';
 import * as moment from 'moment';
-import { PlayerStatistic } from 'src/providers/dataproject/dataproject-api.service';
+import Redis from 'ioredis';
+import { appConfig } from 'src/config';
 
 export type NotificationEvent = LineupEvent | SubstitutionEvent;
 
 @Processor(NOTIFY_QUEUE)
 export class NotifyProcessor {
   constructor(private readonly telegramService: TelegramService) {}
+
+  private readonly redis = new Redis({
+    host: appConfig.redis.host,
+    port: appConfig.redis.port,
+  });
 
   private formatPlayersList(players: PlayerInfo[], symbol: string): string {
     return players
@@ -58,8 +70,12 @@ export class NotifyProcessor {
     missing: PlayerInfo[],
     inactive: PlayerInfo[],
     all: PlayerInfo[],
+    teamName: string,
+    isHome: boolean,
   ): string {
     const parts: string[] = [];
+    // `🔴 *${home.team.name.toUpperCase()}:*`,
+    parts.push(`\n${isHome ? '🔴' : '🔵'} *${teamName.toUpperCase()}:*`);
     if (missing.length)
       parts.push(`❌ *Не заявлены:*\n${this.formatPlayersList(missing, '⚪️')}`);
     if (inactive.length)
@@ -70,6 +86,10 @@ export class NotifyProcessor {
       all.filter((p) => p.isActive),
       '🟢',
     );
+
+    if (!missing.length && !inactive.length && !active) {
+      return '\n';
+    }
     if (active) parts.push(`👥 *Основной состав:*\n${active}`);
     return parts.join('\n\n');
   }
@@ -81,7 +101,10 @@ export class NotifyProcessor {
   private formatNotification(event: NotificationEvent): string {
     const { match, federation, matchDateTimeUtc, type, home, guest } = event;
 
-    const competition = match.competition || 'Неизвестный турнир';
+    const competition =
+      match.competition.name ||
+      match.competition.fullName ||
+      'Неизвестный турнир';
     const titleEmoji = type === 'lineup' ? '📋' : '🔄';
     const titleText = type === 'lineup' ? 'ИЗМЕНЕНИЕ СОСТАВА' : 'ЗАМЕНА';
     const matchLink = `https://${federation.slug}-web.dataproject.com/LiveScore_adv.aspx?ID=${match.id}`;
@@ -91,29 +114,50 @@ export class NotifyProcessor {
       federation?.emoji ? `${federation.emoji} ${federation.name}` : '',
       `🏆 ${competition}`,
       `📅 ${this.formatMatchDateTime(matchDateTimeUtc)}`,
-      `\n🏐 *${home.team.name.toUpperCase()}* vs *${guest.team.name.toUpperCase()}*\n`,
+      `\n🏐 *${home.team.name.toUpperCase()}* vs *${guest.team.name.toUpperCase()}*`,
     ]
       .filter(Boolean)
       .join('\n');
 
     return [
       header,
-      `🔴 *${home.team.name.toUpperCase()}:*`,
+      // `🔴 *${home.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         home.missingPlayers,
         home.inactivePlayers,
         home.team.players,
+        home.team.name,
+        true,
       ),
-      `\n🔵 *${guest.team.name.toUpperCase()}:*`,
+      // `\n🔵 *${guest.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         guest.missingPlayers,
         guest.inactivePlayers,
         guest.team.players,
+        guest.team.name,
+        false,
       ),
-      `\n🔗 [Подробнее](${matchLink})`,
+      `🔗 [Подробнее](${matchLink})`,
     ]
       .filter(Boolean)
       .join('\n');
+  }
+
+  @OnQueueActive()
+  onActive(job: Job) {
+    Logger.log(`Processing job ${job.id} of type ${job.name}`);
+  }
+
+  @OnQueueCompleted()
+  onCompleted(job: Job, result: any) {
+    Logger.log(
+      `Completed job ${job.id} with result: ${JSON.stringify(result)}`,
+    );
+  }
+
+  @OnQueueFailed()
+  onFailed(job: Job, err: any) {
+    Logger.error(`Failed job ${job.id} with error: ${err.message}`);
   }
 
   @Process('notify')
@@ -126,7 +170,12 @@ export class NotifyProcessor {
 
       const message = this.formatNotification(event);
 
-      await this.telegramService.sendMessage(event.userId, message);
+      const key = `notify:${job.id}`;
+      const chatId = appConfig.tg.channelId || event.userId;
+      await this.telegramService.sendMessage(chatId, message);
+      await this.redis.set(key, job.id);
+
+      return {};
     } catch (error) {
       Logger.error('Error processing notification:', error);
       throw error;

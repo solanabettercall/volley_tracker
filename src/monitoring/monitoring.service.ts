@@ -7,6 +7,14 @@ import {
 } from 'src/providers/dataproject/types';
 import { MonitoredTeam } from 'src/schemas/monitoring.schema';
 
+export interface MonitoringPlayerDto {
+  userId: number;
+  federationSlug: string;
+  teamId: number;
+  playerId: number;
+  competitionId: number;
+}
+
 @Injectable()
 export class MonitoringService implements OnApplicationBootstrap {
   constructor(
@@ -20,40 +28,65 @@ export class MonitoringService implements OnApplicationBootstrap {
     await this.monitoredTeamModel.deleteMany({ userId: chatId });
   }
 
-  async addPlayerToMonitoring(
-    userId: number,
-    federationSlug: string,
-    teamId: number,
-    playerId: number,
-  ): Promise<void> {
+  async addPlayerToMonitoring(dto: MonitoringPlayerDto): Promise<void> {
     await this.monitoredTeamModel.findOneAndUpdate(
-      { userId, federationSlug, teamId },
-      { $addToSet: { players: playerId } },
+      {
+        userId: dto.userId,
+        federationSlug: dto.federationSlug,
+        teamId: dto.teamId,
+        competitionId: dto.competitionId,
+      },
+      { $addToSet: { players: dto.playerId } },
       { upsert: true, new: true },
     );
   }
 
-  async removePlayerFromMonitoring(
-    userId: number,
-    federationSlug: string,
-    teamId: number,
-    playerId: number,
-  ): Promise<void> {
+  async removePlayerFromMonitoring(dto: MonitoringPlayerDto): Promise<void> {
     await this.monitoredTeamModel.findOneAndUpdate(
-      { userId, federationSlug, teamId },
-      { $pull: { players: playerId } },
+      {
+        userId: dto.userId,
+        federationSlug: dto.federationSlug,
+        teamId: dto.teamId,
+        competitionId: dto.competitionId,
+      },
+      { $pull: { players: dto.playerId } },
     );
   }
 
   async getMonitoredTeams(
     userId: number,
     federationSlug?: string,
+    competitionId?: number,
   ): Promise<MonitoredTeam[]> {
-    const query: any = { userId };
-    if (federationSlug) {
-      query.federationSlug = federationSlug;
-    }
+    const query: any = { userId, federationSlug, competitionId };
+
     return this.monitoredTeamModel.find(query).exec();
+  }
+
+  async getMonitoredCompetitionIds(
+    userId: number,
+    federationSlug: string,
+  ): Promise<number[]> {
+    const query: any = { userId, federationSlug };
+
+    const teams = await this.monitoredTeamModel.find(query).exec();
+
+    const uniqueIds = Array.from(new Set(teams.map((t) => t.competitionId)));
+
+    return uniqueIds;
+  }
+
+  async getMonitoredFederationSlugs(userId: number): Promise<string[]> {
+    const teams = await this.monitoredTeamModel
+      .find({ userId }, 'federationSlug')
+      .lean()
+      .exec();
+
+    const federationSlugs = Array.from(
+      new Set(teams.map((t) => t.federationSlug)),
+    );
+
+    return federationSlugs;
   }
 
   async getAllMonitoredTeams(
