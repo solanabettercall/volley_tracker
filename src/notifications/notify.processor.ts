@@ -138,7 +138,8 @@ export class NotifyProcessor {
       `\n🔗 [Подробнее](${matchLink})`,
     ]
       .filter(Boolean)
-      .join('\n');
+      .join('\n')
+      .replaceAll('\n\n\n', '\n\n');
   }
 
   @OnQueueActive()
