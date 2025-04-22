@@ -8,4 +8,5 @@ export interface PlayerInfo {
   isActive?: boolean;
   position?: PlayerPosition;
   statistic?: PlayerStatistic | null;
+  endDate?: Date;
 }

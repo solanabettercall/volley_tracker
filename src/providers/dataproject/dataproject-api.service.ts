@@ -1,12 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-  OnApplicationBootstrap,
-  OnModuleInit,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as moment from 'moment';
 import * as cheerio from 'cheerio';
 import { AxiosRequestConfig } from 'axios';
@@ -747,19 +740,49 @@ class DataprojectFederationClient {
             .text()
             .trim();
 
+          const endDateText = element
+            .find('.t-col')
+            .eq(4)
+            .find('p')
+            .last()
+            .text()
+            .trim();
+          const endDate: Date | null = this.parseEndsAtDate(endDateText);
+
           if (playerId && number && name) {
             players.push({
               id: +playerId,
               number: +number,
               fullName: name,
               position,
+              endDate,
             });
           }
         });
+
       return players;
     } catch (error) {
       Logger.error('Ошибка при получении состава команды:', error);
       return [];
+    }
+  }
+
+  private parseEndsAtDate(raw: string): Date | null {
+    try {
+      if (!raw) return null;
+      const match = raw.match(/^Ends at (\d{2}\/\d{2}\/\d{4})$/);
+
+      if (!match) {
+        Logger.warn(`Неожиданные формат даты: "${raw}"`, 'parseEndsAtDate');
+        return null;
+      }
+
+      const [_, dateStr] = match;
+      const date = moment(dateStr, 'DD/MM/YYYY').toDate();
+      return date;
+    } catch (err) {
+      Logger.warn('Ошибка при парсинге даты: ', err);
+      return null;
     }
   }
 
