@@ -15,6 +15,7 @@ import * as stringify from 'json-stable-stringify';
 import { appConfig } from 'src/config';
 import Redis from 'ioredis';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { EventHashService } from './event-hash.service';
 
 interface TeamEventData {
   team: TeamInfo;
@@ -49,12 +50,8 @@ export class MonitoringProcessor {
     private readonly monitoringService: MonitoringService,
     @InjectQueue(NOTIFY_QUEUE)
     private readonly notifyQueue: Queue,
+    private readonly eventHashService: EventHashService,
   ) {}
-
-  private readonly redis = new Redis({
-    host: appConfig.redis.host,
-    port: appConfig.redis.port,
-  });
 
   private hashEvent(event: LineupEvent | SubstitutionEvent): string {
     const normalized = {
@@ -200,13 +197,11 @@ export class MonitoringProcessor {
             };
             const lineupHash = this.hashEvent(lineupEvent);
 
-            const key = `notify:${lineupHash}`;
-            const notifyExist = await this.redis.get(key);
-            if (!notifyExist) {
+            const isNewEvent =
+              await this.eventHashService.checkAndSaveEventHash(lineupHash);
+            if (isNewEvent) {
               await this.notifyQueue.add('notify', lineupEvent, {
                 jobId: lineupHash,
-                removeOnComplete: false,
-                removeOnFail: true,
               });
             }
           }
@@ -220,10 +215,13 @@ export class MonitoringProcessor {
               ...commonEventFields,
             };
             const substitutionHash = this.hashEvent(substitutionEvent);
-            const key = `notify:${substitutionHash}`;
 
-            const notifyExist = await this.redis.get(key);
-            if (!notifyExist) {
+            const isNewEvent =
+              await this.eventHashService.checkAndSaveEventHash(
+                substitutionHash,
+              );
+
+            if (isNewEvent) {
               await this.notifyQueue.add('notify', substitutionEvent, {
                 jobId: substitutionHash,
               });

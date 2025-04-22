@@ -164,15 +164,12 @@ export class NotifyProcessor {
     try {
       const event = job.data;
 
-      // Logger.verbose(job.id);
       Logger.verbose(event, job.id);
 
       const message = this.formatNotification(event);
 
-      const key = `notify:${job.id}`;
       const chatId = appConfig.tg.channelId || event.userId;
       await this.telegramService.sendMessage(chatId, message);
-      await this.redis.set(key, job.id);
 
       return {};
     } catch (error) {
