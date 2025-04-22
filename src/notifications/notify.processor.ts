@@ -121,7 +121,6 @@ export class NotifyProcessor {
 
     return [
       header,
-      // `🔴 *${home.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         home.missingPlayers,
         home.inactivePlayers,
@@ -129,7 +128,6 @@ export class NotifyProcessor {
         home.team.name,
         true,
       ),
-      // `\n🔵 *${guest.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         guest.missingPlayers,
         guest.inactivePlayers,
@@ -137,10 +135,11 @@ export class NotifyProcessor {
         guest.team.name,
         false,
       ),
-      `🔗 [Подробнее](${matchLink})`,
+      `\n🔗 [Подробнее](${matchLink})`,
     ]
       .filter(Boolean)
-      .join('\n');
+      .join('\n')
+      .replaceAll('\n\n\n', '\n\n');
   }
 
   @OnQueueActive()
@@ -165,15 +164,12 @@ export class NotifyProcessor {
     try {
       const event = job.data;
 
-      // Logger.verbose(job.id);
       Logger.verbose(event, job.id);
 
       const message = this.formatNotification(event);
 
-      const key = `notify:${job.id}`;
       const chatId = appConfig.tg.channelId || event.userId;
       await this.telegramService.sendMessage(chatId, message);
-      await this.redis.set(key, job.id);
 
       return {};
     } catch (error) {

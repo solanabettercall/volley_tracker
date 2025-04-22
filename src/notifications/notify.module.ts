@@ -9,6 +9,10 @@ import { DataprojectModule } from 'src/providers/dataproject/dataproject.module'
   imports: [
     BullModule.registerQueue({
       name: NOTIFY_QUEUE,
+      defaultJobOptions: {
+        removeOnComplete: false,
+        removeOnFail: false,
+      },
     }),
     forwardRef(() => TelegramModule),
   ],

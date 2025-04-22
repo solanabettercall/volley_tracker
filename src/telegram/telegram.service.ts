@@ -54,18 +54,67 @@ export class TelegramService implements OnApplicationBootstrap {
     port: appConfig.redis.port,
   });
 
-  async sendMessage(userId: number, message: string) {
-    await this.telegramBot.sendMessage(userId, message, {
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true,
-    });
+  private readonly TELEGRAM_MESSAGE_LIMIT = 1800;
+
+  async sendMessage(
+    userId: number,
+    message: string,
+    options?: TelegramBot.SendMessageOptions,
+  ): Promise<TelegramBot.Message[]> {
+    const messages: TelegramBot.Message[] = [];
+    const lines = message.split('\n');
+
+    let currentChunk = '';
+    const chunks: string[] = [];
+
+    for (const line of lines) {
+      if ((currentChunk + line + '\n').length > this.TELEGRAM_MESSAGE_LIMIT) {
+        chunks.push(currentChunk.trimEnd());
+        currentChunk = '';
+      }
+      currentChunk += line + '\n';
+    }
+
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk.trimEnd());
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const opts: TelegramBot.SendMessageOptions = options
+        ? {
+            ...options,
+            reply_markup: options.reply_markup
+              ? { ...options.reply_markup }
+              : undefined,
+          }
+        : {};
+
+      if (
+        opts.reply_markup &&
+        'inline_keyboard' in opts.reply_markup &&
+        chunks.length > 1 &&
+        i !== chunks.length - 1
+      ) {
+        const { inline_keyboard, ...restMarkup } = opts.reply_markup;
+        opts.reply_markup =
+          restMarkup as TelegramBot.SendMessageOptions['reply_markup'];
+      }
+
+      opts.parse_mode = 'Markdown';
+
+      const sent = await this.telegramBot.sendMessage(userId, chunk, opts);
+      messages.push(sent);
+    }
+
+    return messages;
   }
 
   async onApplicationBootstrap() {
     this.telegramBot.onText(/\/start/, async (msg) => {
       const chatId = msg.chat.id;
       if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
-        return this.telegramBot.sendMessage(chatId, 'Нет доступа');
+        return this.sendMessage(chatId, 'Нет доступа');
       }
       await this.sendMainMenu(chatId);
     });
@@ -73,7 +122,7 @@ export class TelegramService implements OnApplicationBootstrap {
     this.telegramBot.onText(/\/clear/, async (msg) => {
       const chatId = msg.chat.id;
       if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
-        return this.telegramBot.sendMessage(chatId, 'Нет доступа');
+        return this.sendMessage(chatId, 'Нет доступа');
       }
       await this.monitoringService.clearMonitoring(chatId);
       await this.sendMessage(chatId, 'Мониторинг успешно очищен');
@@ -82,7 +131,7 @@ export class TelegramService implements OnApplicationBootstrap {
     this.telegramBot.on('callback_query', async (callbackQuery) => {
       const chatId = callbackQuery.from.id;
       if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
-        return this.telegramBot.sendMessage(chatId, 'Нет доступа');
+        return this.sendMessage(chatId, 'Нет доступа');
       }
       const msg = callbackQuery.message;
       const contextHash = callbackQuery.data;
@@ -213,7 +262,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    this.telegramBot.sendMessage(
+    await this.sendMessage(
       context.chatId,
       `${federation.emoji} ${federation.name}\n\n🏆 Выберите лигу:`,
       {
@@ -377,11 +426,9 @@ export class TelegramService implements OnApplicationBootstrap {
         ],
       ],
     };
-    await this.telegramBot.sendMessage(
-      chatId,
-      'Добро пожаловать! Выберите действие:',
-      { reply_markup: keyboard },
-    );
+    await this.sendMessage(chatId, 'Добро пожаловать! Выберите действие:', {
+      reply_markup: keyboard,
+    });
   }
 
   private async sendFederations(context: ICallbackContext) {
@@ -414,7 +461,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    await this.telegramBot.sendMessage(context.chatId, 'Выберите страну:', {
+    await this.sendMessage(context.chatId, 'Выберите страну:', {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: keyboard,
@@ -473,7 +520,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    this.telegramBot.sendMessage(
+    await this.sendMessage(
       context.chatId,
       `${federation.emoji} ${federation.name}\n🏆 ${competition.name || competition.fullName}\n\n👥 Выберите команду:`,
       {
@@ -584,7 +631,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    this.telegramBot.sendMessage(
+    await this.sendMessage(
       context.chatId,
       `${federation.emoji} ${federation.name}\n🏆 ${competition.name || competition.fullName}\n👥 ${team.name}\n\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
       {
@@ -604,7 +651,7 @@ export class TelegramService implements OnApplicationBootstrap {
     );
 
     if (!monitoredFederations || monitoredFederations.length === 0) {
-      await this.telegramBot.sendMessage(
+      await this.sendMessage(
         context.chatId,
         'Сейчас у вас нет активного мониторинга игроков.',
         {
@@ -665,7 +712,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    await this.telegramBot.sendMessage(context.chatId, 'Выберите страну:', {
+    await this.sendMessage(context.chatId, 'Выберите страну:', {
       reply_markup: {
         inline_keyboard: keyboard,
       },
@@ -723,7 +770,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    this.telegramBot.sendMessage(
+    await this.sendMessage(
       context.chatId,
       `${federation.emoji} ${federation.name}\n\n🏆 Выберите лигу:`,
       {
@@ -789,7 +836,7 @@ export class TelegramService implements OnApplicationBootstrap {
       message += '\n';
     }
 
-    await this.telegramBot.sendMessage(context.chatId, message, {
+    await this.sendMessage(context.chatId, message, {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
@@ -883,7 +930,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    await this.telegramBot.sendMessage(context.chatId, 'Выберите страну:', {
+    await this.sendMessage(context.chatId, 'Выберите страну:', {
       reply_markup: {
         inline_keyboard: keyboard,
       },
@@ -926,7 +973,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    this.telegramBot.sendMessage(
+    await this.sendMessage(
       context.chatId,
       `${federation.emoji} ${federation.name}\n\n🏆 Выберите лигу:`,
       {
@@ -988,7 +1035,7 @@ export class TelegramService implements OnApplicationBootstrap {
       },
     ]);
 
-    await this.telegramBot.sendMessage(
+    await this.sendMessage(
       context.chatId,
       `${federation.emoji} ${federation.name}\n🏆 ${competition.name || competition.fullName}\n\n👥 Выберите команду:`,
       {
@@ -1011,7 +1058,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     const team = teams.find((t) => t.id === context.teamId);
     if (!team) {
-      await this.telegramBot.sendMessage(context.chatId, 'Команда не найдена.');
+      await this.sendMessage(context.chatId, 'Команда не найдена.');
       return;
     }
 
@@ -1052,7 +1099,7 @@ export class TelegramService implements OnApplicationBootstrap {
       message += this.formatPlayerInfo(player) + '\n';
     }
 
-    await this.telegramBot.sendMessage(context.chatId, message, {
+    await this.sendMessage(context.chatId, message, {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
