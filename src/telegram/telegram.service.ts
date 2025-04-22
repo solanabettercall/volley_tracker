@@ -187,7 +187,7 @@ export class TelegramService implements OnApplicationBootstrap {
       });
       keyboard.push([
         {
-          text: competition.name,
+          text: competition.name || competition.fullName,
           callback_data: key,
         },
       ]);
@@ -465,7 +465,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.sendMessage(
       context.chatId,
-      `${federation.emoji} ${federation.name}\n🏆 ${competition.name}\n\n👥 Выберите команду:`,
+      `${federation.emoji} ${federation.name}\n🏆 ${competition.name || competition.fullName}\n\n👥 Выберите команду:`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -576,7 +576,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.sendMessage(
       context.chatId,
-      `${federation.emoji} ${federation.name}\n🏆 ${competition.name}\n👥 ${team.name}\n\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
+      `${federation.emoji} ${federation.name}\n🏆 ${competition.name || competition.fullName}\n👥 ${team.name}\n\nВыберите игроков для мониторинга:\n(❌ - не мониторится, ✅ - мониторится)`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -690,7 +690,7 @@ export class TelegramService implements OnApplicationBootstrap {
       for (let j = 0; j < 2 && i + j < monitoredCompetitions.length; j++) {
         const competition = monitoredCompetitions[i + j];
         row.push({
-          text: competition.name,
+          text: competition.name || competition.fullName,
           callback_data: await this.storeCallbackContext({
             event: 'send_monitored_competition_info',
             chatId: context.chatId,
@@ -895,7 +895,7 @@ export class TelegramService implements OnApplicationBootstrap {
     for (const competition of competitions) {
       keyboard.push([
         {
-          text: competition.name,
+          text: competition.name || competition.fullName,
           callback_data: await this.storeCallbackContext({
             chatId: context.chatId,
             event: 'send_statistic_teams',
@@ -980,7 +980,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     await this.telegramBot.sendMessage(
       context.chatId,
-      `${federation.emoji} ${federation.name}\n🏆 ${competition.name}\n\n👥 Выберите команду:`,
+      `${federation.emoji} ${federation.name}\n🏆 ${competition.name || competition.fullName}\n\n👥 Выберите команду:`,
       {
         reply_markup: {
           inline_keyboard: keyboard,
@@ -1036,7 +1036,7 @@ export class TelegramService implements OnApplicationBootstrap {
     });
 
     let message = '';
-    message += `📊 *Статистика команды*\n${federation.emoji} *${federation.name}*\n🏆 *${competition.name}*\n👥 *${team.name}*\n\n`;
+    message += `📊 *Статистика команды*\n${federation.emoji} *${federation.name}*\n🏆 *${competition.name || competition.fullName}*\n👥 *${team.name}*\n\n`;
 
     for (const player of allPlayers) {
       message += this.formatPlayerInfo(player) + '\n';

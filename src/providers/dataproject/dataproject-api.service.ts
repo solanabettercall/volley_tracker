@@ -401,7 +401,7 @@ class DataprojectFederationClient {
 
     const $ = cheerio.load(data);
 
-    const name = $('div#LYR_Menu h2').text().trim();
+    const name = $('div#LYR_Menu h2').text().trim() || null;
     const fullName = $('div#LYR_CompetitionDescription h2').text().trim();
 
     return {
@@ -876,9 +876,10 @@ export class DataprojectFederationCacheClient extends DataprojectFederationClien
   }
 
   public override async getMatchesInfo(): Promise<MatchInfo[]> {
-    const matchIds = await this.getRawMatchs();
-    const key = `federation:${this.federation.slug}:matchesInfo:${matchIds.sort().join(',')}`;
-    return this.getOrSetCache(key, () => super.getMatchesInfo(matchIds), 30);
+    const matches = await this.getRawMatchs();
+    const matcheIds: number[] = matches.map((m) => m.id);
+    const key = `federation:${this.federation.slug}:matchesInfo:${matcheIds.sort().join(',')}`;
+    return this.getOrSetCache(key, () => super.getMatchesInfo(matches), 30);
 
     // return super.getMatchesInfo(matchIds);
   }

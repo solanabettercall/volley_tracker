@@ -1,4 +1,10 @@
-import { Process, Processor } from '@nestjs/bull';
+import {
+  OnQueueActive,
+  OnQueueCompleted,
+  OnQueueFailed,
+  Process,
+  Processor,
+} from '@nestjs/bull';
 import { Job } from 'bull';
 import { TelegramService } from '../telegram/telegram.service';
 import {
@@ -95,7 +101,10 @@ export class NotifyProcessor {
   private formatNotification(event: NotificationEvent): string {
     const { match, federation, matchDateTimeUtc, type, home, guest } = event;
 
-    const competition = match.competition.name || 'Неизвестный турнир';
+    const competition =
+      match.competition.name ||
+      match.competition.fullName ||
+      'Неизвестный турнир';
     const titleEmoji = type === 'lineup' ? '📋' : '🔄';
     const titleText = type === 'lineup' ? 'ИЗМЕНЕНИЕ СОСТАВА' : 'ЗАМЕНА';
     const matchLink = `https://${federation.slug}-web.dataproject.com/LiveScore_adv.aspx?ID=${match.id}`;
@@ -128,10 +137,27 @@ export class NotifyProcessor {
         guest.team.name,
         false,
       ),
-      `\n🔗 [Подробнее](${matchLink})`,
+      `🔗 [Подробнее](${matchLink})`,
     ]
       .filter(Boolean)
       .join('\n');
+  }
+
+  @OnQueueActive()
+  onActive(job: Job) {
+    Logger.log(`Processing job ${job.id} of type ${job.name}`);
+  }
+
+  @OnQueueCompleted()
+  onCompleted(job: Job, result: any) {
+    Logger.log(
+      `Completed job ${job.id} with result: ${JSON.stringify(result)}`,
+    );
+  }
+
+  @OnQueueFailed()
+  onFailed(job: Job, err: any) {
+    Logger.error(`Failed job ${job.id} with error: ${err.message}`);
   }
 
   @Process('notify')
@@ -147,6 +173,8 @@ export class NotifyProcessor {
       const key = `notify:${job.id}`;
       await this.telegramService.sendMessage(event.userId, message);
       await this.redis.set(key, job.id);
+
+      return {};
     } catch (error) {
       Logger.error('Error processing notification:', error);
       throw error;

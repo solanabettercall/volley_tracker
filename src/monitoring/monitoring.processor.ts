@@ -14,6 +14,7 @@ import * as moment from 'moment';
 import * as stringify from 'json-stable-stringify';
 import { appConfig } from 'src/config';
 import Redis from 'ioredis';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 interface TeamEventData {
   team: TeamInfo;
@@ -247,6 +248,16 @@ export class MonitoringProcessor {
       }
     } catch (err) {
       Logger.error(`Ошибка при обработке ${federation.slug}: ${err.message}`);
+    }
+  }
+
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async handleQueueStatus() {
+    const queues = [{ name: 'notify-queue', queue: this.notifyQueue }];
+
+    for (const { name, queue } of queues) {
+      const counts = await queue.getJobCounts();
+      Logger.verbose(counts, name);
     }
   }
 
