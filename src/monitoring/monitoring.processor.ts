@@ -226,8 +226,6 @@ export class MonitoringProcessor {
             if (!notifyExist) {
               await this.notifyQueue.add('notify', substitutionEvent, {
                 jobId: substitutionHash,
-                removeOnComplete: false,
-                removeOnFail: true,
               });
             }
           }
