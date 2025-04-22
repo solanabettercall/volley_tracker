@@ -81,14 +81,27 @@ export class TelegramService implements OnApplicationBootstrap {
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      const opts = options ? { ...options } : undefined;
+      const opts: TelegramBot.SendMessageOptions = options
+        ? {
+            ...options,
+            reply_markup: options.reply_markup
+              ? { ...options.reply_markup }
+              : undefined,
+          }
+        : {};
 
-      if (opts && chunks.length > 1 && i !== chunks.length - 1) {
-        opts.reply_markup = {
-          ...opts.reply_markup,
-          inline_keyboard: undefined,
-        };
+      if (
+        opts.reply_markup &&
+        'inline_keyboard' in opts.reply_markup &&
+        chunks.length > 1 &&
+        i !== chunks.length - 1
+      ) {
+        const { inline_keyboard, ...restMarkup } = opts.reply_markup;
+        opts.reply_markup =
+          restMarkup as TelegramBot.SendMessageOptions['reply_markup'];
       }
+
+      opts.parse_mode = 'Markdown';
 
       const sent = await this.telegramBot.sendMessage(userId, chunk, opts);
       messages.push(sent);

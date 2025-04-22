@@ -121,7 +121,6 @@ export class NotifyProcessor {
 
     return [
       header,
-      // `🔴 *${home.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         home.missingPlayers,
         home.inactivePlayers,
@@ -129,7 +128,6 @@ export class NotifyProcessor {
         home.team.name,
         true,
       ),
-      // `\n🔵 *${guest.team.name.toUpperCase()}:*`,
       this.formatTeamSection(
         guest.missingPlayers,
         guest.inactivePlayers,
@@ -137,7 +135,7 @@ export class NotifyProcessor {
         guest.team.name,
         false,
       ),
-      `🔗 [Подробнее](${matchLink})`,
+      `\n🔗 [Подробнее](${matchLink})`,
     ]
       .filter(Boolean)
       .join('\n');
