@@ -9,6 +9,7 @@ import { PlayerInfo } from 'src/providers/dataproject/interfaces/player-info.int
 import Redis from 'ioredis';
 import * as stringify from 'json-stable-stringify';
 import { createHash } from 'crypto';
+import * as moment from 'moment';
 
 interface ICallbackContext {
   event: string;
@@ -582,9 +583,12 @@ export class TelegramService implements OnApplicationBootstrap {
 
     const keyboard = [];
     for (const player of players) {
+      const dateString = player.endDate
+        ? moment(player.endDate).format(' ⚠️ DD.MM.YY')
+        : '';
       keyboard.push([
         {
-          text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number ?? 0} ${player.fullName}`,
+          text: `${monitoredPlayerIds.has(player.id) ? '✅' : '❌'} #${player.number ?? 0} ${player.fullName}${dateString}`,
           callback_data: await this.storeCallbackContext({
             event: 'toggle_player',
             chatId: context.chatId,
