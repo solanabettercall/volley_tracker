@@ -62,18 +62,28 @@ export class TelegramService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap() {
-    this.telegramBot.onText(/\/start/, (msg) => {
+    this.telegramBot.onText(/\/start/, async (msg) => {
       const chatId = msg.chat.id;
-      this.sendMainMenu(chatId);
+      if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
+        return this.telegramBot.sendMessage(chatId, 'Нет доступа');
+      }
+      await this.sendMainMenu(chatId);
     });
 
     this.telegramBot.onText(/\/clear/, async (msg) => {
       const chatId = msg.chat.id;
+      if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
+        return this.telegramBot.sendMessage(chatId, 'Нет доступа');
+      }
       await this.monitoringService.clearMonitoring(chatId);
       await this.sendMessage(chatId, 'Мониторинг успешно очищен');
     });
 
     this.telegramBot.on('callback_query', async (callbackQuery) => {
+      const chatId = callbackQuery.from.id;
+      if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
+        return this.telegramBot.sendMessage(chatId, 'Нет доступа');
+      }
       const msg = callbackQuery.message;
       const contextHash = callbackQuery.data;
       const context = await this.getCallbackContext(contextHash);

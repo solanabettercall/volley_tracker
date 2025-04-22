@@ -171,7 +171,8 @@ export class NotifyProcessor {
       const message = this.formatNotification(event);
 
       const key = `notify:${job.id}`;
-      await this.telegramService.sendMessage(event.userId, message);
+      const chatId = appConfig.tg.channelId || event.userId;
+      await this.telegramService.sendMessage(chatId, message);
       await this.redis.set(key, job.id);
 
       return {};

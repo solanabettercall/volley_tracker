@@ -57,20 +57,7 @@ export class MonitoringProcessor {
   });
 
   private hashEvent(event: LineupEvent | SubstitutionEvent): string {
-    // const normalizePlayers = (players: PlayerInfo[]) =>
-    //   players.map((p) => p.id).sort((a, b) => a - b);
-
     const normalized = {
-      // home: {
-      //   missingPlayerIds: normalizePlayers(event.home.missingPlayers),
-      //   inactivePlayerIds: normalizePlayers(event.home.inactivePlayers),
-      //   teamId: event.home.team.id,
-      // },
-      // guest: {
-      //   missingPlayerIds: normalizePlayers(event.guest.missingPlayers),
-      //   inactivePlayerIds: normalizePlayers(event.guest.inactivePlayers),
-      //   teamId: event.guest.team.id,
-      // },
       matchId: event.match.id,
       federationSlug: event.federation.slug,
       userId: event.userId,

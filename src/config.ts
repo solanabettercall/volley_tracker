@@ -11,6 +11,8 @@ interface IRedisConfig {
 
 interface ITelegramConfig {
   token: string;
+  channelId: number | null;
+  adminId: number | null;
 }
 
 interface IDbConfig {
@@ -46,6 +48,8 @@ export const appConfig: IAppConfig = {
   },
   tg: {
     token: process.env.TELEGRAM_BOT_TOKEN,
+    channelId: parseInt(process.env.TELEGRAM_NOTIFICATION_CHANNEL_ID) || null,
+    adminId: parseInt(process.env.TELEGRAM_ADMIN_ID) || null,
   },
 };
 
