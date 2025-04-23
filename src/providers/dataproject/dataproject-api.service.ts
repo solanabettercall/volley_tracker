@@ -319,47 +319,48 @@ class DataprojectFederationClient {
   }
 
   public async getCompetitions(): Promise<ICompetition[]> {
-    const { data } = await this.httpService.axiosRef.get(
-      `https://${this.federation.slug}-web.dataproject.com/MainHome.aspx`,
-      {},
-    );
+    // const { data } = await this.httpService.axiosRef.get(
+    //   `https://${this.federation.slug}-web.dataproject.com/MainHome.aspx`,
+    //   {},
+    // );
 
-    const $ = cheerio.load(data);
+    // const $ = cheerio.load(data);
 
-    let rawCompetitions: Pick<ICompetition, 'id' | 'name'>[] = $(
-      'li a[id^="C_"]',
-    )
-      .map((_, el) => {
-        const id = parseInt($(el).attr('id').replace('C_', ''), 10);
-        const name = $(el).text().trim();
-        return { id, name };
-      })
-      .toArray();
+    // let rawCompetitions: Pick<ICompetition, 'id' | 'name'>[] = $(
+    //   'li a[id^="C_"]',
+    // )
+    //   .map((_, el) => {
+    //     const id = parseInt($(el).attr('id').replace('C_', ''), 10);
+    //     const name = $(el).text().trim();
+    //     return { id, name };
+    //   })
+    //   .toArray();
 
-    if (!rawCompetitions.length) {
-      rawCompetitions = $(
-        'input[id^="Content_Main_RP_Competitions_HF_CompetitionID"]',
-      )
-        .map((_, el) => {
-          const id = parseInt($(el).attr('value').trim());
-          const name = $(el)
-            .parent()
-            .find(
-              'span[id^="Content_Main_RP_Competitions_LBL_CompetitionDescription"]',
-            )
-            .text()
-            .trim();
-          return { id, name };
-        })
-        .toArray();
-    }
+    // if (!rawCompetitions.length) {
+    //   rawCompetitions = $(
+    //     'input[id^="Content_Main_RP_Competitions_HF_CompetitionID"]',
+    //   )
+    //     .map((_, el) => {
+    //       const id = parseInt($(el).attr('value').trim());
+    //       const name = $(el)
+    //         .parent()
+    //         .find(
+    //           'span[id^="Content_Main_RP_Competitions_LBL_CompetitionDescription"]',
+    //         )
+    //         .text()
+    //         .trim();
+    //       return { id, name };
+    //     })
+    //     .toArray();
+    // }
+    // console.log('rawCompetitions', rawCompetitions);
 
-    const uniqueCompetitions = Array.from(
-      new Map(rawCompetitions.map((comp) => [comp.id, comp])).values(),
-    ).filter((c) => this.federation.competitionIds.includes(c.id));
+    // const uniqueCompetitions = Array.from(
+    //   new Map(rawCompetitions.map((comp) => [comp.id, comp])).values(),
+    // ).filter((c) => this.federation.competitionIds.includes(c.id));
 
     const competitions: ICompetition[] = [];
-    for (const { id } of uniqueCompetitions) {
+    for (const id of this.federation.competitionIds) {
       const competition = await this.getFullCompetitionById(id);
       competitions.push(competition);
     }
