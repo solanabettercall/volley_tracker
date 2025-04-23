@@ -31,7 +31,8 @@ export type FederationSlug =
   | 'osbih'
   | 'fbf'
   | 'iva'
-  | 'svbf';
+  | 'svbf'
+  | 'cbv';
 
 export interface FederationInfo {
   slug: FederationSlug;
@@ -114,4 +115,5 @@ export const federations: FederationInfo[] = [
   { slug: 'fbf', name: 'Фареры', emoji: '🇫🇴', competitionIds: [10, 12] },
   { slug: 'iva', name: 'Израиль', emoji: '🇮🇱', competitionIds: [39, 40] },
   { slug: 'svbf', name: 'Швеция', emoji: '🇸🇪', competitionIds: [402, 403] },
+  { slug: 'cbv', name: 'Бразилия', emoji: '🇧🇷', competitionIds: [45, 46] },
 ];

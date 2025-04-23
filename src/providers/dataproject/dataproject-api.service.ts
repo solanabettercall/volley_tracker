@@ -664,13 +664,17 @@ class DataprojectFederationClient {
         return PlayerPosition.L;
       case 'middle-blocker':
       case 'middle blocker':
+      case 'meio':
         return PlayerPosition.MB;
       case 'opposite':
+      case 'oposto':
         return PlayerPosition.O;
       case 'setter':
+      case 'levantador':
         return PlayerPosition.S;
       case 'wing-spiker':
       case 'wing spiker':
+      case 'ponta':
         return PlayerPosition.WS;
       case 'universal':
         return PlayerPosition.U;
