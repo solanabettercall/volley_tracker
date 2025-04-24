@@ -576,7 +576,7 @@ class DataprojectFederationClient {
             ...p,
             isActive: activePlayers.some(
               (a) =>
-                a.id === p.id && a.isHome === isHome && a.number === p.number,
+                a.id === p.id || (a.isHome === isHome && a.number === p.number),
             ),
           }));
 
