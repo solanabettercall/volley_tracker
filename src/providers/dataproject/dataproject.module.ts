@@ -11,7 +11,7 @@ import { appConfig } from 'src/config';
         const options: HttpModuleOptions = {};
         if (appConfig.env === 'local') {
           options.proxy = {
-            host: '172.26.208.1',
+            host: '192.168.100.1',
             port: 8888,
             protocol: 'http',
           };
