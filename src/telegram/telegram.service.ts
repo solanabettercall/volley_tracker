@@ -114,7 +114,10 @@ export class TelegramService implements OnApplicationBootstrap {
   async onApplicationBootstrap() {
     this.telegramBot.onText(/\/start/, async (msg) => {
       const chatId = msg.chat.id;
-      if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
+      if (
+        appConfig.tg.adminIds.length > 0 &&
+        !appConfig.tg.adminIds.includes(chatId)
+      ) {
         return this.sendMessage(chatId, 'Нет доступа');
       }
       await this.sendMainMenu(chatId);
@@ -122,7 +125,10 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.onText(/\/clear/, async (msg) => {
       const chatId = msg.chat.id;
-      if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
+      if (
+        appConfig.tg.adminIds.length > 0 &&
+        !appConfig.tg.adminIds.includes(chatId)
+      ) {
         return this.sendMessage(chatId, 'Нет доступа');
       }
       await this.monitoringService.clearMonitoring(chatId);
@@ -131,7 +137,10 @@ export class TelegramService implements OnApplicationBootstrap {
 
     this.telegramBot.on('callback_query', async (callbackQuery) => {
       const chatId = callbackQuery.from.id;
-      if (appConfig.tg.adminId && chatId !== appConfig.tg.adminId) {
+      if (
+        appConfig.tg.adminIds.length > 0 &&
+        !appConfig.tg.adminIds.includes(chatId)
+      ) {
         return this.sendMessage(chatId, 'Нет доступа');
       }
       const msg = callbackQuery.message;
@@ -895,6 +904,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
     const parts = [
       player.number ? `[[${player.number}]] ` : '',
+      player.endDate ? '🚫 ' : '',
       `*${player.fullName}*`,
       player.position ? `_(${player.position})_` : '',
       ratingPart,
@@ -1061,6 +1071,7 @@ export class TelegramService implements OnApplicationBootstrap {
     const matches = await client.getMatchesInfo();
 
     const team = teams.find((t) => t.id === context.teamId);
+
     if (!team) {
       await this.sendMessage(context.chatId, 'Команда не найдена.');
       return;
@@ -1070,6 +1081,7 @@ export class TelegramService implements OnApplicationBootstrap {
       team.id,
       context.competitionId,
     );
+    console.log(rosterPlayers);
 
     const liveMatch = matches
       .flatMap((m) => [m.home, m.guest])
@@ -1089,10 +1101,12 @@ export class TelegramService implements OnApplicationBootstrap {
     }
 
     allPlayers = allPlayers.sort((a, b) => {
-      if (a.statistic?.rating === null || a.statistic?.rating === undefined)
-        return 1;
-      if (b.statistic?.rating === null || b.statistic?.rating === undefined)
-        return -1;
+      if (a.endDate && !b.endDate) return 1;
+      if (!a.endDate && b.endDate) return -1;
+
+      if (!a.statistic?.rating) return 1;
+      if (!b.statistic?.rating) return -1;
+
       return b.statistic.rating - a.statistic.rating;
     });
 

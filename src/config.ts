@@ -12,7 +12,7 @@ interface IRedisConfig {
 interface ITelegramConfig {
   token: string;
   channelId: number | null;
-  adminId: number | null;
+  adminIds: number[];
 }
 
 interface IDbConfig {
@@ -30,6 +30,16 @@ interface IAppConfig {
   db: IDbConfig;
   tg: ITelegramConfig;
 }
+
+const parseAdminIds = (raw: string | undefined): number[] => {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .map((id) => parseInt(id, 10))
+    .filter((id) => !isNaN(id));
+};
 
 export const appConfig: IAppConfig = {
   env: process.env.NODE_ENV ?? 'local',
@@ -49,7 +59,7 @@ export const appConfig: IAppConfig = {
   tg: {
     token: process.env.TELEGRAM_BOT_TOKEN,
     channelId: parseInt(process.env.TELEGRAM_NOTIFICATION_CHANNEL_ID) || null,
-    adminId: parseInt(process.env.TELEGRAM_ADMIN_ID) || null,
+    adminIds: parseAdminIds(process.env.TELEGRAM_ADMIN_IDS),
   },
 };
 

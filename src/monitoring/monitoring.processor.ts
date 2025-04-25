@@ -108,7 +108,11 @@ export class MonitoringProcessor {
         for (const player of match.guest.players) {
           player.statistic = await this.dataprojectApiService
             .getClient(federation)
-            .getPlayerStatistic(player.id, match.home.id, match.competition.id);
+            .getPlayerStatistic(
+              player.id,
+              match.guest.id,
+              match.competition.id,
+            );
         }
 
         const usersMonitoringMatch = new Set<number>();
