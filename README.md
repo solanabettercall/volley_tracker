@@ -44,7 +44,7 @@ PGADMIN_PORT=7777
 # Telegram
 TELEGRAM_BOT_TOKEN=<TELEGRAM_BOT_TOKEN>                     # Получить в @BotFather
 TELEGRAM_NOTIFICATION_CHANNEL_ID=-1002561104113             # Получить через web.telegram.org/a
-TELEGRAM_ADMIN_ID=1635660561                                # Получить через @userinfobot
+TELEGRAM_ADMIN_IDS=1635660561,1234567561                    # Получить через @userinfobot
 ```
 
 ---
@@ -78,7 +78,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up --build -
 
 - Бот уведомляет об изменениях, событиях матчей и т. д.
 - Канал уведомлений задаётся через `TELEGRAM_NOTIFICATION_CHANNEL_ID`
-- Можно ограничить доступ к боту только для администратора, указав `TELEGRAM_ADMIN_ID`
+- Можно ограничить доступ к боту только для администраторов, указав `TELEGRAM_ADMIN_IDS`
 
 ---
 
