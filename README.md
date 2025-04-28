@@ -36,11 +36,6 @@ DB_NAME=volley_tracker_db
 DB_USER=volley_user
 DB_PASSWORD=volley_pass
 
-# PgAdmin (если используется)
-PGADMIN_EMAIL=admin@admin.com
-PGADMIN_PASSWORD=admin
-PGADMIN_PORT=7777
-
 # Telegram
 TELEGRAM_BOT_TOKEN=<TELEGRAM_BOT_TOKEN>                     # Получить в @BotFather
 TELEGRAM_NOTIFICATION_CHANNEL_ID=-1002561104113             # Получить через web.telegram.org/a
